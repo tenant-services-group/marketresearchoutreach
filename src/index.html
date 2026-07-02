@@ -463,7 +463,7 @@
       <input type="radio" name="srcMode" value="xlsx">
       <div class="option-body">
         <div class="option-title">Upload an Excel file (.xlsx)</div>
-        <div class="option-desc">Needs columns for email, first name, and property address (a city column is needed if you use the city-filter subject option below). Column names don't need to match exactly.</div>
+        <div class="option-desc">Needs columns for email, first name, and property address. Column names don't need to match exactly.</div>
         <div class="option-extra">
           <label class="file-drop" id="dropExcel">
             <input type="file" id="excelInput" accept=".xlsx,.xls,.csv">
@@ -561,7 +561,7 @@
       <input type="radio" name="subjMode" value="city">
       <div class="option-body">
         <div class="option-title">Use property address(es) in a specific city</div>
-        <div class="option-desc">Enter a city &mdash; the subject becomes the city followed by that contact's addresses in it, e.g. "North Austin - 123 Elm St. | 456 Lake Rd."</div>
+        <div class="option-desc">Enter text (usually a city) to place in front of that contact's property addresses, e.g. "Dallas - 123 Elm St. | 456 Lake Rd. | 789 Grass Rd."</div>
         <div class="option-extra">
           <input type="text" id="cityInput" placeholder="e.g. North Austin">
         </div>
@@ -1227,7 +1227,7 @@ function handleExcelFile(file){
       }
       if (!contacts.length) throw new Error("No rows with an email address were found.");
       clearDrafts();
-      setStatus('excelStatus', `Loaded ${contacts.length} rows across ${new Set(contacts.map(c=>c.email.toLowerCase())).size} unique email addresses.${cityCol===-1 ? ' No city column found — the city-filter subject option will not work with this file.' : ''}`, 'ok');
+      setStatus('excelStatus', `Loaded ${contacts.length} rows across ${new Set(contacts.map(c=>c.email.toLowerCase())).size} unique email addresses.`, 'ok');
     } catch(err){
       contacts = [];
       setStatus('excelStatus', 'Error: ' + err.message, 'error');
@@ -1338,15 +1338,10 @@ document.getElementById('generateBtn').addEventListener('click', function(){
       subject = customSubject;
     } else if (mode === 'addresses'){
       subject = addrList.join(', ');
-    } else { // city
-      const cf = cityFilter.trim().toLowerCase();
-      const cityAddrs = g.addresses.filter(a => {
-        const c = (a.city || '').trim().toLowerCase();
-        return c && (c === cf || c.includes(cf) || cf.includes(c));
-      }).map(a => a.address).filter(Boolean);
-      subject = cityAddrs.length
-        ? cityFilter + ' - ' + cityAddrs.join(' | ')
-        : cityFilter + ' - (no matching addresses found)';
+    } else { // city label
+      subject = addrList.length
+        ? cityFilter + ' - ' + addrList.join(' | ')
+        : cityFilter;
     }
 
     const mailto = 'mailto:' + encodeURIComponent(g.email) +
