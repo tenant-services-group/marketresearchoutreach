@@ -47,6 +47,11 @@
     max-width:920px;
     margin:0 auto;
     padding:28px 24px 0;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:16px;
+    flex-wrap:wrap;
   }
   .page-title h1{
     font-family:'Playfair Display','Libre Franklin',Georgia,serif;
@@ -416,8 +421,11 @@
 </header>
 
 <div class="page-title">
-  <h1>Market Research Outreach</h1>
-  <p>Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.</p>
+  <div>
+    <h1>Market Research Outreach</h1>
+    <p>Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.</p>
+  </div>
+  <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh">Reset all</button>
 </div>
 
 <main>
@@ -921,6 +929,7 @@ function finalizeContacts(silentRestore){
     address: (r.address || '').trim(),
     city: (r.city || '').trim()
   }));
+  clearDrafts();
   const uniq = new Set(contacts.map(c => c.email.toLowerCase())).size;
   const skipped = extractedRows.length - usable.length;
   try { localStorage.setItem('tsg_outreach_finalized', JSON.stringify({at: Date.now(), rows: extractedRows})); } catch (err) {}
@@ -958,6 +967,7 @@ document.getElementById('downloadXlsxBtn').addEventListener('click', function(){
 document.getElementById('startOverBtn').addEventListener('click', function(){
   extractedRows = [];
   contacts = [];
+  clearDrafts();
   try { localStorage.removeItem('tsg_outreach_finalized'); } catch (err) {}
   document.getElementById('reviewCard').style.display = 'none';
   document.getElementById('pdfResult').className = 'extract-result';
@@ -1216,6 +1226,7 @@ function handleExcelFile(file){
         });
       }
       if (!contacts.length) throw new Error("No rows with an email address were found.");
+      clearDrafts();
       setStatus('excelStatus', `Loaded ${contacts.length} rows across ${new Set(contacts.map(c=>c.email.toLowerCase())).size} unique email addresses.${cityCol===-1 ? ' No city column found — the city-filter subject option will not work with this file.' : ''}`, 'ok');
     } catch(err){
       contacts = [];
@@ -1351,6 +1362,22 @@ document.getElementById('generateBtn').addEventListener('click', function(){
 });
 
 let sentSet = new Set();
+
+// Clears generated drafts and the results panel — called whenever the contact
+// list changes so stale drafts can never be mixed with a new upload.
+function clearDrafts(){
+  generatedResults = [];
+  sentSet.clear();
+  document.getElementById('resultList').innerHTML = '';
+  document.getElementById('results').style.display = 'none';
+  setStatus('genStatus', '', '');
+}
+
+// Full page reset: wipe the saved list and reload for a clean slate.
+document.getElementById('resetPageBtn').addEventListener('click', function(){
+  try { localStorage.removeItem('tsg_outreach_finalized'); } catch (err) {}
+  location.reload();
+});
 
 function isSent(sentKey){
   return sentSet.has(sentKey);
