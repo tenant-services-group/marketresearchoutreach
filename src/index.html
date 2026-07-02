@@ -553,7 +553,7 @@
       <input type="radio" name="subjMode" value="city">
       <div class="option-body">
         <div class="option-title">Use property address(es) in a specific city</div>
-        <div class="option-desc">Enter a city &mdash; only that contact's addresses in that city will be used in the subject.</div>
+        <div class="option-desc">Enter a city &mdash; the subject becomes the city followed by that contact's addresses in it, e.g. "North Austin - 123 Elm St. | 456 Lake Rd."</div>
         <div class="option-extra">
           <input type="text" id="cityInput" placeholder="e.g. North Austin">
         </div>
@@ -1229,6 +1229,20 @@ document.getElementById('excelInput').addEventListener('change', e => handleExce
 setupDragDrop('dropExcel', 'excelInput', handleExcelFile);
 
 // ================= Docx upload =================
+// Converts mammoth's HTML into plain text that mirrors the Word document exactly:
+// one line break per paragraph, blank lines only where the doc has empty paragraphs,
+// soft line breaks (Shift+Enter) preserved, list items rendered as "\u2022 " bullets.
+function docxHtmlToText(html){
+  let t = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\u2022 ')
+    .replace(/<\/(p|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
+  const ta = document.createElement('textarea');
+  ta.innerHTML = t; // decode HTML entities
+  return ta.value.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
+}
+
 function handleDocxFile(file){
   if (!file) return;
   document.getElementById('docxText').textContent = file.name;
@@ -1236,9 +1250,9 @@ function handleDocxFile(file){
   setStatus('docxStatus', 'Reading file...', '');
   const reader = new FileReader();
   reader.onload = function(evt){
-    mammoth.extractRawText({arrayBuffer: evt.target.result})
+    mammoth.convertToHtml({arrayBuffer: evt.target.result}, {ignoreEmptyParagraphs: false})
       .then(function(result){
-        docxTemplateText = result.value;
+        docxTemplateText = docxHtmlToText(result.value);
         if (!hasPlaceholders(docxTemplateText)){
           setStatus('docxStatus', 'Loaded, but the document is missing "NAME" and/or "ADDRESS" placeholders — check spelling/capitalization exactly.', 'error');
         } else {
@@ -1303,8 +1317,7 @@ document.getElementById('generateBtn').addEventListener('click', function(){
   generatedResults = grouped.map(g => {
     const addrList = g.addresses.map(a=>a.address).filter(Boolean);
     const bodyAddrBlock = addrList.map(a => '-' + a).join('\n');
-    const cleanedTemplate = templateText.replace(/\n{3,}/g, '\n\n');
-    let body = cleanedTemplate
+    let body = templateText
       .split('ADDRESS(ES)').join(bodyAddrBlock)
       .replace(/\bADDRESS\b/g, bodyAddrBlock)
       .replace(/\bNAME\b/g, g.name || '');
@@ -1315,9 +1328,14 @@ document.getElementById('generateBtn').addEventListener('click', function(){
     } else if (mode === 'addresses'){
       subject = addrList.join(', ');
     } else { // city
-      const cityAddrs = g.addresses.filter(a => a.city && a.city.toLowerCase() === cityFilter.toLowerCase()).map(a=>a.address);
-      subject = cityAddrs.join(', ');
-      if (!subject) subject = '(no addresses found for "' + cityFilter + '")';
+      const cf = cityFilter.trim().toLowerCase();
+      const cityAddrs = g.addresses.filter(a => {
+        const c = (a.city || '').trim().toLowerCase();
+        return c && (c === cf || c.includes(cf) || cf.includes(c));
+      }).map(a => a.address).filter(Boolean);
+      subject = cityAddrs.length
+        ? cityFilter + ' - ' + cityAddrs.join(' | ')
+        : cityFilter + ' - (no matching addresses found)';
     }
 
     const mailto = 'mailto:' + encodeURIComponent(g.email) +
