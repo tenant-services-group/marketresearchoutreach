@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TSG Market Research Outreach</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --navy:#074A75;
+    --navy-dark:#053553;
+    --orange:#F47D48;
+    --orange-dark:#DA6631;
+    --gray:#bab3ad;
+    --paper:#FAF8F6;
+    --ink:#1B2530;
+    --line:#E2DFDB;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'DM Sans','Hanken Grotesk',Arial,sans-serif;
+    line-height:1.5;
+  }
+  header{
+    background:var(--navy);
+    color:#fff;
+    padding:18px 32px;
+    border-bottom:3px solid var(--orange);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+  }
+  header img.logo{ height:38px; display:block; }
+  header .tagline{
+    font-size:13px;
+    letter-spacing:0.04em;
+    color:#cfe0ec;
+    white-space:nowrap;
+  }
+  .page-title{
+    max-width:920px;
+    margin:0 auto;
+    padding:28px 24px 0;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .page-title h1{
+    font-family:'Playfair Display','Libre Franklin',Georgia,serif;
+    font-weight:700;
+    font-size:26px;
+    margin:0 0 4px 0;
+    color:var(--navy);
+    letter-spacing:0.2px;
+  }
+  .page-title p{
+    margin:0;
+    color:#6b7280;
+    font-size:14px;
+  }
+  main{
+    max-width:920px;
+    margin:0 auto;
+    padding:24px 24px 80px;
+  }
+  .card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:24px;
+    margin-bottom:24px;
+  }
+  .card h2{
+    font-family:'Libre Franklin',Arial,sans-serif;
+    font-size:15px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--navy);
+    margin:0 0 4px 0;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .step-num{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:24px;height:24px;
+    border-radius:50%;
+    background:var(--orange);
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+    flex-shrink:0;
+  }
+  .card .hint{
+    font-size:13px;
+    color:#6b7280;
+    margin:0 0 16px 0;
+  }
+  .file-drop{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    height:56px;
+    border:1.5px dashed var(--gray);
+    border-radius:8px;
+    padding:0 16px;
+    background:#FBFAF9;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .file-drop:hover{ border-color:var(--orange); background:#fff7f2; }
+  .file-drop.dragover{ border-color:var(--orange); background:#fff2ea; }
+  .file-drop input{ display:none; }
+  .file-drop .drop-icon{ font-size:16px; flex-shrink:0; }
+  .file-drop .drop-text{
+    font-size:14px;
+    color:#8a8a86;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .file-drop.has-file .drop-text{ color:var(--navy); font-weight:600; }
+  .option{
+    display:flex;
+    gap:12px;
+    padding:14px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    margin-bottom:10px;
+    align-items:flex-start;
+    cursor:pointer;
+  }
+  .option:hover{ border-color:var(--orange); }
+  .option input[type=radio]{ margin-top:3px; accent-color:var(--orange); }
+  .option-body{ flex:1; min-width:0; }
+  .option-title{ font-weight:600; font-size:14px; }
+  .option-desc{ font-size:13px; color:#6b7280; margin-top:2px; }
+  .option-extra{ margin-top:10px; display:none; }
+  .option.active .option-extra{ display:block; }
+  .option.active{ border-color:var(--orange); background:#fff9f5; }
+  input[type=text]{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fff;
+  }
+  input[type=text]:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  textarea.tpl{
+    width:100%;
+    min-height:260px;
+    padding:12px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:13.5px;
+    font-family:inherit;
+    line-height:1.5;
+    resize:vertical;
+    background:#fff;
+  }
+  textarea.tpl:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  .chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .chip{
+    border:1px solid var(--line);
+    background:#fff;
+    color:var(--ink);
+    border-radius:20px;
+    padding:7px 15px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+    transition:all .12s ease;
+  }
+  .chip:hover{ border-color:var(--orange); color:var(--orange-dark); }
+  .chip.active{ background:var(--orange); border-color:var(--orange); color:#fff; }
+  .fields-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+    margin-bottom:12px;
+  }
+  @media (min-width:640px){
+    .fields-grid{ grid-template-columns:1fr 1fr; }
+  }
+  .field-item label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    color:var(--navy);
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    margin-bottom:4px;
+  }
+  .fields-note{
+    font-size:12.5px;
+    color:#6b7280;
+    margin:0 0 10px 0;
+  }
+  .tpl-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin:4px 0 6px;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .tpl-toolbar .label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--navy);
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+  }
+  button.primary{
+    background:var(--navy);
+    color:#fff;
+    border:none;
+    padding:13px 22px;
+    border-radius:7px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    width:100%;
+    font-family:inherit;
+  }
+  button.primary:hover{ background:var(--navy-dark); }
+  button.primary:disabled{ background:#9fb4c2; cursor:not-allowed; }
+  .status{ font-size:13px; margin-top:10px; color:#6b7280; min-height:16px; }
+  .status.error{ color:#b3261e; }
+  .status.ok{ color:#0d7a3f; }
+  .status.warn{ color:#9a6a00; }
+  #results{ display:none; }
+  .result-row{
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:16px;
+    margin-bottom:12px;
+    display:flex;
+    justify-content:space-between;
+    gap:16px;
+    align-items:flex-start;
+    background:#fff;
+  }
+  .result-meta{ flex:1; min-width:0; }
+  .result-meta .name{ font-weight:700; font-size:14px; color:var(--navy); }
+  .result-meta .email{ font-size:12.5px; color:#6b7280; }
+  .result-meta .subj{ font-size:13px; margin-top:6px; }
+  .result-meta .subj b{ color:var(--ink); }
+  .result-meta details{ margin-top:8px; }
+  .result-meta summary{ font-size:12.5px; color:var(--orange-dark); cursor:pointer; }
+  .result-meta pre{
+    white-space:pre-wrap;
+    font-family:inherit;
+    font-size:13px;
+    background:#FAF8F6;
+    padding:10px;
+    border-radius:6px;
+    margin-top:6px;
+    border:1px solid var(--line);
+  }
+  .result-actions{
+    flex-shrink:0;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    align-items:stretch;
+  }
+  .compose-btn{
+    background:var(--orange);
+    color:#fff;
+    text-decoration:none;
+    padding:10px 16px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    white-space:nowrap;
+    display:inline-block;
+    text-align:center;
+  }
+  .compose-btn:hover{ background:var(--orange-dark); }
+  .copy-btn{
+    background:none;
+    border:1px solid var(--navy);
+    color:var(--navy);
+    padding:8px 14px;
+    border-radius:6px;
+    font-size:12.5px;
+    cursor:pointer;
+    font-weight:600;
+    font-family:inherit;
+    white-space:nowrap;
+  }
+  .copy-btn:hover{ background:var(--navy); color:#fff; }
+  .result-row.sent{ background:#F7FAF8; border-color:#cfe8d8; }
+  .result-row.sent .compose-btn{ background:#fff; color:#0d7a3f; border:1px solid #0d7a3f; }
+  .result-row.sent .compose-btn:hover{ background:#eefaf1; }
+  .sent-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    font-size:11.5px;
+    font-weight:700;
+    color:#0d7a3f;
+    background:#e6f6ea;
+    padding:2px 8px;
+    border-radius:20px;
+    margin-left:8px;
+  }
+  .summary-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .summary-bar span{ font-size:13.5px; color:#6b7280; }
+  .link-btn{
+    background:none;
+    border:1px solid var(--navy);
+    color:var(--navy);
+    padding:7px 14px;
+    border-radius:6px;
+    font-size:12.5px;
+    cursor:pointer;
+    font-weight:600;
+    font-family:inherit;
+  }
+  .link-btn:hover{ background:var(--navy); color:#fff; }
+  .pxe-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:12px;
+    flex-wrap:wrap;
+  }
+  .count-label{ font-size:13px; }
+  input[type=number]{
+    width:110px;
+    padding:9px 11px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fff;
+  }
+  input[type=number]:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  .extract-result{
+    display:none;
+    margin-top:14px;
+    padding:14px 16px;
+    border-radius:8px;
+    background:#F2F8F4;
+    border:1px solid #CFE8D9;
+  }
+  .extract-result.visible{ display:block; }
+  .extract-result.warn{ background:#FFF6EC; border-color:#F3D9BC; }
+  .er-title{ font-size:14px; font-weight:700; color:#0d7a3f; margin:0 0 4px; }
+  .extract-result.warn .er-title{ color:#B3432B; }
+  .er-detail{ font-size:13px; margin:0; line-height:1.5; }
+  .review-summary{ font-size:13px; color:#6b7280; margin:0 0 10px; }
+  .review-summary b{ color:var(--navy); }
+  .review-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
+  .review-table{ border-collapse:collapse; width:100%; min-width:1080px; font-size:13px; }
+  .review-table th{
+    background:var(--navy);
+    color:#fff;
+    text-align:left;
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    padding:8px 10px;
+    white-space:nowrap;
+  }
+  .review-table td{ border-top:1px solid var(--line); padding:0; }
+  .review-table tr:nth-child(even) td{ background:#FBFAF9; }
+  .review-table input{
+    width:100%;
+    border:none;
+    padding:8px 10px;
+    font-size:13px;
+    font-family:inherit;
+    background:transparent;
+    min-width:110px;
+  }
+  .review-table input:focus{ outline:2px solid var(--orange); outline-offset:-2px; background:#fff9f5; }
+  .review-table input.flag{ background:#FFF2EA; }
+  .btn-row{ display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:#9a9691;
+    padding:20px 0 40px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="logo" src="https://raw.githubusercontent.com/vanessawillis/tsglogo/main/White%20TSG%20Logo.png" alt="TSG">
+  <span class="tagline">Built for the Tenant.</span>
+</header>
+
+<div class="page-title">
+  <div>
+    <h1>Market Research Outreach</h1>
+    <p>Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.</p>
+  </div>
+  <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh">Reset all</button>
+</div>
+
+<main>
+
+  <div class="card" id="contactCard">
+    <h2><span class="step-num">1</span> Get your contact list</h2>
+    <p class="hint">Extract contacts straight from a property PDF report, or upload an Excel file you already have.</p>
+
+    <label class="option" data-smode="pdf">
+      <input type="radio" name="srcMode" value="pdf" checked>
+      <div class="option-body">
+        <div class="option-title">Extract from a PDF report</div>
+        <div class="option-desc">Upload a CoStar-style property PDF &mdash; contacts are pulled out for review in step 2, then loaded here automatically. Runs fully in your browser.</div>
+        <div class="option-extra">
+          <label class="file-drop" id="dropPdf">
+            <input type="file" id="pdfInput" accept="application/pdf">
+            <span class="drop-icon">&#128209;</span>
+            <span class="drop-text" id="pdfText">Click to choose a PDF, or drag one here</span>
+          </label>
+          <div class="pxe-row">
+            <label class="count-label" for="pdfCount">Expected number of properties</label>
+            <input type="number" id="pdfCount" min="1" placeholder="e.g. 121">
+          </div>
+          <button type="button" class="primary" id="extractBtn" style="margin-top:14px;">Extract contacts</button>
+          <div class="status" id="pdfStatus"></div>
+          <div class="extract-result" id="pdfResult">
+            <p class="er-title" id="pdfResultTitle"></p>
+            <p class="er-detail" id="pdfResultDetail"></p>
+          </div>
+        </div>
+      </div>
+    </label>
+
+    <label class="option" data-smode="xlsx">
+      <input type="radio" name="srcMode" value="xlsx">
+      <div class="option-body">
+        <div class="option-title">Upload an Excel file (.xlsx)</div>
+        <div class="option-desc">Needs columns for email, first name, and property address (a city column is needed if you use the city-filter subject option below). Column names don't need to match exactly.</div>
+        <div class="option-extra">
+          <label class="file-drop" id="dropExcel">
+            <input type="file" id="excelInput" accept=".xlsx,.xls,.csv">
+            <span class="drop-icon">&#128202;</span>
+            <span class="drop-text" id="excelText">Click to choose an Excel file, or drag one here</span>
+          </label>
+          <div class="status" id="excelStatus"></div>
+        </div>
+      </div>
+    </label>
+  </div>
+
+  <div class="card" id="reviewCard" style="display:none;">
+    <h2><span class="step-num">2</span> Review &amp; finalize contacts</h2>
+    <p class="hint">Type directly into any cell to fix or fill in what the PDF didn't capture. Missing first names and emails are highlighted. Rows without an email are left out when you finalize.</p>
+    <div class="review-summary" id="reviewSummary"></div>
+    <div class="review-wrap">
+      <table class="review-table">
+        <thead><tr id="reviewHead"></tr></thead>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="primary" id="finalizeBtn" style="width:auto;">Finalize &amp; load contacts</button>
+      <button type="button" class="link-btn" id="downloadXlsxBtn">Download Excel file</button>
+      <button type="button" class="link-btn" id="startOverBtn">Start over</button>
+    </div>
+    <div class="status" id="finalizeStatus"></div>
+  </div>
+
+  <div class="card" id="templateCard">
+    <h2><span class="step-num">3</span> Choose your email template</h2>
+    <p class="hint">Use <b>NAME</b> where the contact's first name goes and <b>ADDRESS</b> where the address list goes &mdash; both are replaced automatically for each contact. Everything else is kept exactly as written.</p>
+
+    <label class="option" data-tmode="generic">
+      <input type="radio" name="tplMode" value="generic" checked>
+      <div class="option-body">
+        <div class="option-title">Use a generic template</div>
+        <div class="option-desc">Pick an industry, fill in the blanks, and adjust the wording as needed.</div>
+        <div class="option-extra">
+          <div class="chips" id="industryChips"></div>
+          <div id="genericEditor" style="display:none;">
+            <p class="fields-note">Fill in the blanks below &mdash; the template updates as you type. Anything left empty stays as a visible blank.</p>
+            <div class="fields-grid" id="fieldsGrid"></div>
+            <div class="tpl-toolbar">
+              <span class="label">Template preview &mdash; editable</span>
+              <button type="button" class="copy-btn" id="resetTplBtn">Reset to template</button>
+            </div>
+            <textarea class="tpl" id="genericText" spellcheck="true"></textarea>
+            <div class="status" id="genericStatus"></div>
+          </div>
+        </div>
+      </div>
+    </label>
+
+    <label class="option" data-tmode="docx">
+      <input type="radio" name="tplMode" value="docx">
+      <div class="option-body">
+        <div class="option-title">Upload a Word template (.docx)</div>
+        <div class="option-desc">Use your own template document.</div>
+        <div class="option-extra">
+          <label class="file-drop" id="dropDocx">
+            <input type="file" id="docxInput" accept=".docx">
+            <span class="drop-icon">&#128196;</span>
+            <span class="drop-text" id="docxText">Click to choose a Word file, or drag one here</span>
+          </label>
+          <div class="status" id="docxStatus"></div>
+        </div>
+      </div>
+    </label>
+
+    <label class="option" data-tmode="paste">
+      <input type="radio" name="tplMode" value="paste">
+      <div class="option-body">
+        <div class="option-title">Paste template text</div>
+        <div class="option-desc">No template document? Paste or type the email body here.</div>
+        <div class="option-extra">
+          <textarea class="tpl" id="pasteText" spellcheck="true" placeholder="Hello NAME,&#10;&#10;We are interested in:&#10;ADDRESS&#10;&#10;..."></textarea>
+          <div class="status" id="pasteStatus"></div>
+        </div>
+      </div>
+    </label>
+  </div>
+
+  <div class="card" id="subjectCard">
+    <h2><span class="step-num">4</span> Choose what goes in the subject line</h2>
+    <label class="option" data-mode="addresses">
+      <input type="radio" name="subjMode" value="addresses" checked>
+      <div class="option-body">
+        <div class="option-title">Use the property address(es) for that email</div>
+        <div class="option-desc">Subject will read, e.g. "Address 1, Address 2, Address 3"</div>
+      </div>
+    </label>
+    <label class="option" data-mode="city">
+      <input type="radio" name="subjMode" value="city">
+      <div class="option-body">
+        <div class="option-title">Use property address(es) in a specific city</div>
+        <div class="option-desc">Enter a city &mdash; the subject becomes the city followed by that contact's addresses in it, e.g. "North Austin - 123 Elm St. | 456 Lake Rd."</div>
+        <div class="option-extra">
+          <input type="text" id="cityInput" placeholder="e.g. North Austin">
+        </div>
+      </div>
+    </label>
+    <label class="option" data-mode="custom">
+      <input type="radio" name="subjMode" value="custom">
+      <div class="option-body">
+        <div class="option-title">Use the same subject for every email</div>
+        <div class="option-desc">Type the exact subject line to use on all drafts.</div>
+        <div class="option-extra">
+          <input type="text" id="customSubjectInput" placeholder="e.g. North Austin Availability">
+        </div>
+      </div>
+    </label>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-num">5</span> Generate</h2>
+    <p class="hint">This builds one draft per unique email address, combining every property address tied to that contact.</p>
+    <button class="primary" id="generateBtn" disabled>Generate drafts</button>
+    <div class="status" id="genStatus"></div>
+  </div>
+
+  <div class="card" id="results">
+    <h2 style="margin-bottom:14px;">Draft emails</h2>
+    <div class="summary-bar">
+      <span id="resultCount"></span>
+      <span>
+        <button class="link-btn" id="toggleAllBtn" style="margin-right:8px;">Expand all previews</button>
+        <button class="link-btn" id="resetSentBtn" style="margin-right:8px;">Reset sent status</button>
+        <button class="link-btn" id="downloadBtn">Download this list as an HTML page</button>
+      </span>
+    </div>
+    <div id="resultList"></div>
+  </div>
+
+</main>
+
+<footer>TSG &mdash; internal outreach tool. Files are processed in your browser and are not uploaded anywhere.</footer>
+
+<script>
+let contacts = [];        // raw rows from excel
+let docxTemplateText = ""; // raw text extracted from an uploaded docx
+let grouped = [];          // [{email, name, addresses:[{address, city}]}]
+let generatedResults = [];
+
+// ================= Phase 1: PDF extraction =================
+// Parser functions below are verbatim from the PDF-to-Excel extractor — do not modify.
+const STATE_MAP = {
+  "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO",
+  "Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID",
+  "Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA",
+  "Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN",
+  "Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV",
+  "New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC",
+  "North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA",
+  "Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX",
+  "Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV",
+  "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC"
+};
+const STATE_NAMES = Object.keys(STATE_MAP).sort((a,b) => b.length - a.length);
+const CITY_LINE_RE = new RegExp('^([A-Za-z][A-Za-z .\'-]*),\\s*(' + STATE_NAMES.join('|') + ')\\s+(\\d{5})\\b');
+const SECTION_HEADERS = ['Primary Leasing Company','Property Manager','True Owner'];
+const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
+const TOL = 2.5;
+
+function toRow(y){ return -y; }
+
+function zoneOf(x){
+  if (x < 150) return 'A';
+  if (x < 300) return 'B';
+  if (x < 470) return 'C';
+  return 'D';
+}
+
+function zoneOf(x){
+  if (x < 150) return 'A';
+  if (x < 300) return 'B';
+  if (x < 470) return 'C';
+  return 'D';
+}
+
+function groupByRow(words, tol){
+  const ws = words.slice().sort((a,b) => a.row - b.row);
+  const lines = [];
+  let cur = [];
+  let lastRow = null;
+  for (const w of ws) {
+    if (lastRow === null || Math.abs(w.row - lastRow) <= tol) {
+      cur.push(w);
+    } else {
+      lines.push(cur);
+      cur = [w];
+    }
+    lastRow = w.row;
+  }
+  if (cur.length) lines.push(cur);
+  return lines.map(ln => {
+    const sorted = ln.slice().sort((a,b) => a.x - b.x);
+    return { text: sorted.map(w => w.str).join(' ').replace(/\s+/g,' ').trim(), row: Math.min(...ln.map(w => w.row)), words: ln };
+  });
+}
+
+function groupZoneLines(words, tol){
+  const lines = groupByRow(words, tol);
+  return lines.map(l => l.text).filter(t => t.length > 0);
+}
+
+async function getPageWords(page){
+  const content = await page.getTextContent();
+  return content.items
+    .filter(it => it.str && it.str.trim().length > 0)
+    .map(it => ({ str: it.str, x: it.transform[4], row: toRow(it.transform[5]) }));
+}
+
+function finalizeSection(ctx){
+  if (!ctx.current || !ctx.currentSection) return;
+  if (ctx.current._chosen) { ctx.currentSection = null; ctx.sectionWords = []; return; }
+  const zoneA = ctx.sectionWords.filter(w => zoneOf(w.x) === 'A');
+  const zoneB = ctx.sectionWords.filter(w => zoneOf(w.x) === 'B');
+  const zoneC = ctx.sectionWords.filter(w => zoneOf(w.x) === 'C');
+  const aLines = groupZoneLines(zoneA, TOL);
+  const bLines = groupZoneLines(zoneB, TOL);
+  const cLines = groupZoneLines(zoneC, TOL);
+
+  let company = aLines[0] || '';
+  if (aLines.length > 1 && !/^\d/.test(aLines[1]) && !/^[A-Za-z ]+,\s*[A-Z]{2}\s+\d{5}/.test(aLines[1])) {
+    company = company.endsWith('-') ? (company.slice(0,-1) + aLines[1]) : (company + ' ' + aLines[1]);
+  }
+
+  const names = bLines.filter((_, i) => i % 2 === 0);
+  let firstName = '', lastName = '', email = '';
+  if (names.length) {
+    const parts = names[0].split(/\s+/).filter(Boolean);
+    if (parts.length) { firstName = parts[0]; lastName = parts.slice(1).join(' '); }
+  }
+  if (cLines.length) {
+    const raw = cLines[0];
+    const strip = raw.match(/^[A-Za-z]{1,8}-([\w.+-]+@[\w-]+\.[\w.-]+)$/);
+    if (strip) email = strip[1];
+    else {
+      const m = raw.match(EMAIL_RE);
+      email = m ? m[0] : raw;
+    }
+  }
+
+  if (firstName) {
+    ctx.current.leasingCompany = company;
+    ctx.current.firstName = firstName;
+    ctx.current.lastName = lastName;
+    ctx.current.email = email;
+    ctx.current._chosen = true;
+  }
+  ctx.currentSection = null;
+  ctx.sectionWords = [];
+}
+
+function finalizeRecord(ctx){
+  if (ctx.current) {
+    finalizeSection(ctx);
+    delete ctx.current._chosen;
+    ctx.records.push(ctx.current);
+  }
+  ctx.current = null;
+}
+
+async function extractRecords(file, onProgress){
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const ctx = { records: [], current: null, currentSection: null, sectionWords: [] };
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    if (onProgress) onProgress(p, pdf.numPages);
+    const page = await pdf.getPage(p);
+    const words = await getPageWords(page);
+    if (!words.length) continue;
+
+    const wideAll = groupByRow(words, TOL);
+    const wide = wideAll.filter(l => !/^\d{1,4}$/.test(l.text.trim()));
+
+    const events = [];
+    for (let i = 0; i < wide.length - 1; i++) {
+      if (CITY_LINE_RE.test(wide[i+1].text)) {
+        events.push({ row: wide[i].row, type: 'title', title: wide[i].text, city: wide[i+1].text });
+      }
+    }
+    for (let i = 0; i < wide.length; i++) {
+      const t = wide[i].text.trim();
+      if (SECTION_HEADERS.includes(t)) {
+        events.push({ row: wide[i].row, type: 'header', name: t });
+      }
+    }
+    events.sort((a,b) => a.row - b.row);
+
+    for (let idx = 0; idx < events.length; idx++) {
+      const ev = events[idx];
+      const segStart = ev.row;
+      const segEnd = (idx + 1 < events.length) ? events[idx+1].row : Infinity;
+      const segWords = words.filter(w => w.row > segStart + 0.5 && w.row < segEnd - 0.5);
+
+      if (ev.type === 'title') {
+        finalizeSection(ctx);
+        finalizeRecord(ctx);
+        const nextIndex = ctx.records.length + 1;
+        let rawTitle = ev.title;
+        const badgeMatch = rawTitle.match(/^(\d{1,4})\s+(.+)$/);
+        if (badgeMatch && parseInt(badgeMatch[1], 10) === nextIndex) {
+          rawTitle = badgeMatch[2];
+        }
+        let address = rawTitle, propertyName = '';
+        const dashIdx = rawTitle.indexOf(' - ');
+        if (dashIdx !== -1) {
+          const left = rawTitle.slice(0, dashIdx).trim();
+          const right = rawTitle.slice(dashIdx + 3).trim();
+          address = left;
+          if (right.toLowerCase() !== left.toLowerCase()) propertyName = right;
+        }
+        const m = ev.city.match(CITY_LINE_RE);
+        let city = '', st = '', zip = '';
+        if (m) { city = m[1].trim(); st = STATE_MAP[m[2]] || m[2]; zip = m[3]; }
+        ctx.current = { address, propertyName, city, state: st, zip, leasingCompany:'', firstName:'', lastName:'', email:'' };
+        ctx.currentSection = null;
+        ctx.sectionWords = [];
+      } else if (ev.type === 'header') {
+        finalizeSection(ctx);
+        ctx.currentSection = ev.name;
+        ctx.sectionWords = segWords;
+      }
+    }
+  }
+  finalizeSection(ctx);
+  finalizeRecord(ctx);
+  return ctx.records;
+}
+
+function recordsToRows(records){
+  return records.map(r => [
+    r.address, r.propertyName, r.leasingCompany, r.firstName, r.lastName, r.email, r.city, r.state, r.zip
+  ]);
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const pdfState = { file: null };
+let extractedRows = [];    // editable review rows (9 fields per record)
+let lastExtract = { expected: 0, sourceName: '' };
+
+function handlePdfFile(file){
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')){
+    setStatus('pdfStatus', 'Please upload a PDF file.', 'error');
+    return;
+  }
+  pdfState.file = file;
+  const sizeMb = (file.size / (1024*1024)).toFixed(1);
+  document.getElementById('pdfText').textContent = file.name + ' (' + sizeMb + ' MB)';
+  document.getElementById('dropPdf').classList.add('has-file');
+  setStatus('pdfStatus', '', '');
+}
+document.getElementById('pdfInput').addEventListener('change', e => handlePdfFile(e.target.files[0]));
+setupDragDrop('dropPdf', 'pdfInput', handlePdfFile);
+
+async function runExtraction(){
+  setStatus('pdfStatus', '', '');
+  document.getElementById('pdfResult').className = 'extract-result';
+  if (!pdfState.file){ setStatus('pdfStatus', 'Upload a PDF first.', 'error'); return; }
+  const expectedCount = parseInt(document.getElementById('pdfCount').value, 10);
+  if (!expectedCount || expectedCount < 1){ setStatus('pdfStatus', 'Enter how many properties this report should contain.', 'error'); return; }
+  const btn = document.getElementById('extractBtn');
+  btn.disabled = true;
+  try {
+    const records = await extractRecords(pdfState.file, (pg, total) => {
+      setStatus('pdfStatus', 'Reading page ' + pg + ' of ' + total + '\u2026', '');
+    });
+    if (records.length === 0){
+      throw new Error('No property listings were recognized in this PDF. This parser expects the standard layout (numbered listing, address, "City, State ZIP (County)" line). If this report is formatted differently, it may need a different approach.');
+    }
+    extractedRows = records;
+    lastExtract = { expected: expectedCount, sourceName: pdfState.file.name || '' };
+    setStatus('pdfStatus', '', '');
+    const resultEl = document.getElementById('pdfResult');
+    const title = document.getElementById('pdfResultTitle');
+    const detail = document.getElementById('pdfResultDetail');
+    if (records.length === expectedCount){
+      title.textContent = 'Done \u2014 ' + records.length + ' properties extracted.';
+      detail.textContent = 'That matches the expected count of ' + expectedCount + '. Review the table below, fill in anything missing, and finalize.';
+      resultEl.className = 'extract-result visible';
+    } else {
+      title.textContent = 'Extracted ' + records.length + ' properties (expected ' + expectedCount + ').';
+      detail.textContent = 'The count doesn\'t match what you entered. Since this runs on layout patterns rather than reading comprehension, a mismatch usually means a listing used an unusual format \u2014 check the table below against the source PDF before finalizing.';
+      resultEl.className = 'extract-result warn visible';
+    }
+    setStatus('finalizeStatus', '', '');
+    renderReviewTable();
+    document.getElementById('reviewCard').scrollIntoView({behavior:'smooth'});
+  } catch (err){
+    setStatus('pdfStatus', err.message || 'Something went wrong while parsing this PDF. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById('extractBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  runExtraction();
+});
+
+// ================= Review & finalize =================
+const REVIEW_COLS = [
+  {key:'address', label:'Property Address'},
+  {key:'propertyName', label:'Property Name'},
+  {key:'leasingCompany', label:'Leasing Company'},
+  {key:'firstName', label:'First Name', flag:true},
+  {key:'lastName', label:'Last Name'},
+  {key:'email', label:'Contact Email', flag:true},
+  {key:'city', label:'City'},
+  {key:'state', label:'State'},
+  {key:'zip', label:'Zip'}
+];
+
+function renderReviewTable(){
+  document.getElementById('reviewHead').innerHTML = REVIEW_COLS.map(c => '<th>' + c.label + '</th>').join('');
+  const body = document.getElementById('reviewBody');
+  body.innerHTML = '';
+  extractedRows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    REVIEW_COLS.forEach(col => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = row[col.key] || '';
+      if (col.flag && !(row[col.key] || '').trim()) input.classList.add('flag');
+      input.addEventListener('input', function(){
+        extractedRows[i][col.key] = this.value;
+        if (col.flag) this.classList.toggle('flag', !this.value.trim());
+        updateReviewSummary();
+      });
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  updateReviewSummary();
+  document.getElementById('reviewCard').style.display = 'block';
+}
+
+function updateReviewSummary(){
+  const total = extractedRows.length;
+  const noEmail = extractedRows.filter(r => !(r.email || '').trim()).length;
+  const noName = extractedRows.filter(r => !(r.firstName || '').trim()).length;
+  document.getElementById('reviewSummary').innerHTML =
+    '<b>' + total + '</b> contact' + (total === 1 ? '' : 's') + ' extracted \u2014 <b>' +
+    noEmail + '</b> missing email, <b>' + noName + '</b> missing first name.';
+}
+
+function finalizeContacts(silentRestore){
+  const usable = extractedRows.filter(r => (r.email || '').trim());
+  if (!usable.length){
+    setStatus('finalizeStatus', 'No rows have an email address \u2014 add emails in the table above first.', 'error');
+    return false;
+  }
+  contacts = usable.map(r => ({
+    email: (r.email || '').trim(),
+    name: (r.firstName || '').trim(),
+    address: (r.address || '').trim(),
+    city: (r.city || '').trim()
+  }));
+  clearDrafts();
+  const uniq = new Set(contacts.map(c => c.email.toLowerCase())).size;
+  const skipped = extractedRows.length - usable.length;
+  try { localStorage.setItem('tsg_outreach_finalized', JSON.stringify({at: Date.now(), rows: extractedRows})); } catch (err) {}
+  if (!silentRestore){
+    setStatus('finalizeStatus',
+      'Finalized ' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + ' across ' + uniq + ' unique email address' + (uniq === 1 ? '' : 'es') + '.' +
+      (skipped ? ' ' + skipped + ' row' + (skipped === 1 ? '' : 's') + ' without an email ' + (skipped === 1 ? 'was' : 'were') + ' left out.' : ''),
+      skipped ? 'warn' : 'ok');
+  }
+  checkReady();
+  return true;
+}
+document.getElementById('finalizeBtn').addEventListener('click', function(){ finalizeContacts(false); });
+
+document.getElementById('downloadXlsxBtn').addEventListener('click', function(){
+  if (!extractedRows.length) return;
+  const headers = ['Property Address','Property Name','Leasing Company Name','First Name','Last Name','Contact Email','City','State','Zip'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...recordsToRows(extractedRows)]);
+  ws['!cols'] = [
+    { wch: 28 }, { wch: 24 }, { wch: 24 }, { wch: 14 },
+    { wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 8 }, { wch: 10 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Properties');
+  const wbArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbArray], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (lastExtract.sourceName ? lastExtract.sourceName.replace(/\.pdf$/i, '') : 'properties') + '_extracted.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('startOverBtn').addEventListener('click', function(){
+  extractedRows = [];
+  contacts = [];
+  clearDrafts();
+  try { localStorage.removeItem('tsg_outreach_finalized'); } catch (err) {}
+  document.getElementById('reviewCard').style.display = 'none';
+  document.getElementById('pdfResult').className = 'extract-result';
+  pdfState.file = null;
+  document.getElementById('pdfInput').value = '';
+  document.getElementById('pdfText').textContent = 'Click to choose a PDF, or drag one here';
+  document.getElementById('dropPdf').classList.remove('has-file');
+  document.getElementById('pdfCount').value = '';
+  setStatus('pdfStatus', '', '');
+  setStatus('finalizeStatus', '', '');
+  checkReady();
+});
+
+// ================= Generic templates (Market Research - Email Templates) =================
+const GENERIC_TEMPLATES = {
+  "Office": {
+    fields: [
+      {key:"sf", label:"Approx. SF", blank:"____"},
+      {key:"floor", label:"Preferred floor", blank:"first"}
+    ],
+    body: "Hello NAME,\n\nWe have a national client looking for around {sf} SF of general office space, and we have some interest in your building. The {floor} floor is preferred, but we are flexible so long as there is an elevator.\n\nWe are interested in:\nADDRESS\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 Suite number/floor/location in the building\n\u2022 Rental Rate and estimate of any additional expenses\n\u2022 Floor plan\n\u2022 Flyer (if available)\n\u2022 Parking Ratio: (? /1,000 SF)\n\u2022 Surface or Covered parking?\n\u2022 Building Amenities:\n   - Include whether there is a shared conference room, deli, reserved parking, storage, fitness center, security, etc.\n\u2022 Building/Pylon/Monument signage\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  },
+  "Office-Medical": {
+    fields: [
+      {key:"sf", label:"Approx. SF", blank:"___"},
+      {key:"term", label:"Lease term (years)", blank:"___"},
+      {key:"rooms", label:"Preferred exam rooms", blank:"4\u20135"}
+    ],
+    body: "Hello NAME,\n\nWe have a national medical client looking for second-generation medical office space ASAP. They need approximately {sf} SF for a {term}-year lease.\n\nA sample floor plan includes three exam/patient rooms, but they would prefer {rooms} exam rooms total (one of the offices could potentially be converted).\n\nWe are interested in:\nADDRESS\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 SF available and location within the building (Suite #, floor, etc.)\n\u2022 Rental rate\n\u2022 NNN estimate (if applicable)\n\u2022 Electric estimate (if applicable)\n\u2022 Current as-built floor plan & any photos\n\u2022 Plumbing in space?\n\u2022 Parking Ratio (e.g., spaces per 1,000 SF)\n\u2022 Flyer/Brochure\n\u2022 Anything else you think we should know about the space/building\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  },
+  "Retail": {
+    fields: [
+      {key:"client", label:"Client type", blank:"__________________"},
+      {key:"sf", label:"Approx. SF", blank:"____"},
+      {key:"term", label:"Lease term (years)", blank:"__"}
+    ],
+    body: "Hello NAME,\n\nWe have a {client} client who is looking for {sf} SF for a {term}-year lease, and your property is of interest.\n\nWe are primarily looking at retail sites with a lot of windows, but first-floor office/flex sites can work as well if they have good visibility in high traffic areas.\n\nWe are interested in:\nADDRESS\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 Proposed size of space and location within the center\n\u2022 LOD/as-built of the space\n\u2022 Most recent use of space\n\u2022 Rental rate and NNN estimates\n\u2022 Parking Ratio and what off-site parking is available nearby\n\u2022 Major tenants in the center and any restrictions on the space\n\u2022 Is the Landlord proposing any TIA? Our building is plumbing-intensive, and although we cover most of the costs, we look for Landlord contribution as well.\n\u2022 Flyer/Floorplans\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  },
+  "Retail-Medical": {
+    fields: [
+      {key:"sf", label:"Approx. SF (contiguous)", blank:"____"},
+      {key:"term", label:"Lease term (years)", blank:"__"},
+      {key:"use", label:"Permitted use to confirm", blank:"__________________"}
+    ],
+    body: "Hello NAME,\n\nWe have a medical client looking for {sf} SF contiguous for a {term}-year lease. If you can't today, do you have any tenants vacating, MTM, or that can be relocated to get us there? The client is open to buying as well.\n\nWe are interested in:\nADDRESS\n\nWe need access to the back of the space for a 53' tractor-trailer for shipping, but do NOT need a dock. Please confirm zoning and whether {use} would be permitted use.\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 Quoted Rate\n\u2022 Parking Ratio\n\u2022 Co-tenancy concerns\n\u2022 Locations of proposed suite\n\u2022 Flyer/floorplans\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  },
+  "Retail-Restaurant": {
+    fields: [
+      {key:"locations", label:"Number of locations", blank:"___"},
+      {key:"minsf", label:"Min SF", blank:"___"},
+      {key:"maxsf", label:"Max SF", blank:"___"}
+    ],
+    body: "Hello NAME,\n\nWe represent a corporate restaurant operator with over {locations} locations. Our client is looking for space and is open to leasing or purchasing.\n\nWe are interested in:\nADDRESS\n\nHere are the key requirements:\nSize: Approximately {minsf} - {maxsf} SF\nSpace type: Freestanding, end cap, or inline suites\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 Asking rate/Purchase Price\n\u2022 Expenses (NNN or other)\n\u2022 Electrical capacity (number of amps)\n\u2022 Flyer or marketing package\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  },
+  "Industrial": {
+    fields: [
+      {key:"client", label:"Client description", blank:"national business services"},
+      {key:"sf", label:"Approx. SF (up to)", blank:"___"},
+      {key:"offices", label:"Number of offices", blank:"___"},
+      {key:"acres", label:"Approx. acres", blank:"___"}
+    ],
+    body: "Hello NAME,\n\nWe have a {client} client looking for up to about {sf} SF. We are looking for an industrial site that ideally includes {offices} offices, a conference room, kitchenette, break room, restroom, and reception. We are looking for around {acres} acres with a mechanic bay and roll-up door close to a highway preferably.\n\nWe are interested in:\nADDRESS\n\nIf your property is a potential fit, please reply with the following information at your earliest convenience so we can include your property in our Market Survey:\n\n\u2022 Rental rate and expenses\n\u2022 Flyer with any building/space photos\n\u2022 Clear height\n\u2022 Power\n\u2022 Column Spacing\n\nIf you have any additional listings in the area that may be a good fit, please send them over and we'll include them in our Market Survey.\n\nThanks in advance for your help!"
+  }
+};
+const INDUSTRY_ORDER = ["Office","Office-Medical","Retail","Retail-Medical","Retail-Restaurant","Industrial"];
+
+let selectedIndustry = null;
+let fieldValues = {};
+let manualMode = false; // true once the user hand-edits the generic preview
+
+function setStatus(elId, msg, cls){
+  const el = document.getElementById(elId);
+  el.textContent = msg;
+  el.className = "status" + (cls ? " " + cls : "");
+}
+
+// ================= Template mode handling =================
+function currentTplMode(){
+  return document.querySelector('input[name="tplMode"]:checked').value;
+}
+
+function currentTemplateText(){
+  const mode = currentTplMode();
+  if (mode === 'docx') return docxTemplateText;
+  if (mode === 'generic') return document.getElementById('genericText').value;
+  return document.getElementById('pasteText').value;
+}
+
+function hasPlaceholders(text){
+  return /\bNAME\b/.test(text) && /ADDRESS(\(ES\))?/.test(text);
+}
+
+function checkReady(){
+  const tpl = currentTemplateText().trim();
+  document.getElementById('generateBtn').disabled = !(contacts.length && tpl.length);
+}
+
+// Option group behavior (scoped so template options and subject options don't fight)
+function initOptionGroup(cardId, onChange){
+  const card = document.getElementById(cardId);
+  card.querySelectorAll('.option').forEach(opt => {
+    opt.addEventListener('click', function(e){
+      // Don't toggle the radio when interacting with inputs inside an already-active option
+      if (this.classList.contains('active') && (e.target.closest('input[type=text], textarea, button, .file-drop, .chip'))) return;
+      card.querySelectorAll('.option').forEach(o => o.classList.remove('active'));
+      this.classList.add('active');
+      this.querySelector('input[type=radio]').checked = true;
+      if (onChange) onChange(this);
+    });
+  });
+}
+initOptionGroup('subjectCard', null);
+initOptionGroup('templateCard', () => checkReady());
+initOptionGroup('contactCard', () => checkReady());
+document.querySelector('#contactCard .option[data-smode="pdf"]').classList.add('active');
+document.querySelector('#subjectCard .option[data-mode="addresses"]').classList.add('active');
+document.querySelector('#templateCard .option[data-tmode="generic"]').classList.add('active');
+
+// ================= Generic templates UI =================
+const chipsWrap = document.getElementById('industryChips');
+INDUSTRY_ORDER.forEach(name => {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip';
+  btn.textContent = name;
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    selectIndustry(name);
+  });
+  chipsWrap.appendChild(btn);
+});
+
+function selectIndustry(name){
+  selectedIndustry = name;
+  fieldValues = {};
+  manualMode = false;
+  chipsWrap.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.textContent === name));
+  document.getElementById('genericEditor').style.display = 'block';
+  renderFields();
+  renderGenericPreview();
+  setStatus('genericStatus', name + ' template loaded. Fill in the blanks or edit the text directly.', 'ok');
+  checkReady();
+}
+
+function renderFields(){
+  const grid = document.getElementById('fieldsGrid');
+  grid.innerHTML = '';
+  const tpl = GENERIC_TEMPLATES[selectedIndustry];
+  tpl.fields.forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.className = 'field-item';
+    const label = document.createElement('label');
+    label.textContent = f.label;
+    label.setAttribute('for', 'fld_' + f.key);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'fld_' + f.key;
+    input.placeholder = f.blank;
+    input.addEventListener('input', function(){
+      fieldValues[f.key] = this.value;
+      if (!manualMode) renderGenericPreview();
+    });
+    input.addEventListener('click', e => e.stopPropagation());
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    grid.appendChild(wrap);
+  });
+}
+
+function buildGenericBody(){
+  const tpl = GENERIC_TEMPLATES[selectedIndustry];
+  let body = tpl.body;
+  tpl.fields.forEach(f => {
+    const val = (fieldValues[f.key] || '').trim();
+    body = body.split('{' + f.key + '}').join(val || f.blank);
+  });
+  return body;
+}
+
+function renderGenericPreview(){
+  document.getElementById('genericText').value = buildGenericBody();
+  checkReady();
+}
+
+function setFieldsDisabled(disabled){
+  document.querySelectorAll('#fieldsGrid input').forEach(i => i.disabled = disabled);
+}
+
+// Hand-editing the preview protects the user's changes from being overwritten by field inputs
+document.getElementById('genericText').addEventListener('input', function(){
+  if (selectedIndustry && !manualMode){
+    manualMode = true;
+    setFieldsDisabled(true);
+    setStatus('genericStatus', 'Editing directly \u2014 fill-in fields are paused so your changes aren\u2019t overwritten. "Reset to template" re-enables them.', 'warn');
+  }
+  checkReady();
+});
+
+document.getElementById('resetTplBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  if (!selectedIndustry) return;
+  manualMode = false;
+  setFieldsDisabled(false);
+  renderGenericPreview();
+  setStatus('genericStatus', 'Reset to the ' + selectedIndustry + ' template with your field values applied.', 'ok');
+});
+
+// Paste option
+document.getElementById('pasteText').addEventListener('input', checkReady);
+
+// ================= Excel upload =================
+function findColumn(headers, candidates){
+  const lower = headers.map(h => (h||"").toString().trim().toLowerCase());
+  for (const cand of candidates){
+    const idx = lower.findIndex(h => h === cand);
+    if (idx !== -1) return idx;
+  }
+  for (const cand of candidates){
+    const idx = lower.findIndex(h => h.includes(cand));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+function handleExcelFile(file){
+  if (!file) return;
+  document.getElementById('excelText').textContent = file.name;
+  document.getElementById('dropExcel').classList.add('has-file');
+  setStatus('excelStatus', 'Reading file...', '');
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:""});
+      if (!rows.length) throw new Error("Sheet appears empty.");
+      const headers = rows[0];
+      const emailCol = findColumn(headers, ['email','e-mail','email address','contact email']);
+      const nameCol = findColumn(headers, ['first name','firstname','contact name','name']);
+      const addrCol = findColumn(headers, ['property address','address','property']);
+      const cityCol = findColumn(headers, ['city']);
+      if (emailCol === -1 || nameCol === -1 || addrCol === -1){
+        throw new Error("Couldn't find email, first name, and property address columns. Found headers: " + headers.join(', '));
+      }
+      contacts = [];
+      for (let i=1;i<rows.length;i++){
+        const r = rows[i];
+        const email = (r[emailCol]||"").toString().trim();
+        if (!email) continue;
+        contacts.push({
+          email,
+          name: (r[nameCol]||"").toString().trim(),
+          address: (r[addrCol]||"").toString().trim(),
+          city: cityCol!==-1 ? (r[cityCol]||"").toString().trim() : ""
+        });
+      }
+      if (!contacts.length) throw new Error("No rows with an email address were found.");
+      clearDrafts();
+      setStatus('excelStatus', `Loaded ${contacts.length} rows across ${new Set(contacts.map(c=>c.email.toLowerCase())).size} unique email addresses.${cityCol===-1 ? ' No city column found — the city-filter subject option will not work with this file.' : ''}`, 'ok');
+    } catch(err){
+      contacts = [];
+      setStatus('excelStatus', 'Error: ' + err.message, 'error');
+    }
+    checkReady();
+  };
+  reader.readAsArrayBuffer(file);
+}
+document.getElementById('excelInput').addEventListener('change', e => handleExcelFile(e.target.files[0]));
+setupDragDrop('dropExcel', 'excelInput', handleExcelFile);
+
+// ================= Docx upload =================
+// Converts mammoth's HTML into plain text that mirrors the Word document exactly:
+// one line break per paragraph, blank lines only where the doc has empty paragraphs,
+// soft line breaks (Shift+Enter) preserved, list items rendered as "\u2022 " bullets.
+function docxHtmlToText(html){
+  let t = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\u2022 ')
+    .replace(/<\/(p|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
+  const ta = document.createElement('textarea');
+  ta.innerHTML = t; // decode HTML entities
+  return ta.value.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
+}
+
+function handleDocxFile(file){
+  if (!file) return;
+  document.getElementById('docxText').textContent = file.name;
+  document.getElementById('dropDocx').classList.add('has-file');
+  setStatus('docxStatus', 'Reading file...', '');
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    mammoth.convertToHtml({arrayBuffer: evt.target.result}, {ignoreEmptyParagraphs: false})
+      .then(function(result){
+        docxTemplateText = docxHtmlToText(result.value);
+        if (!hasPlaceholders(docxTemplateText)){
+          setStatus('docxStatus', 'Loaded, but the document is missing "NAME" and/or "ADDRESS" placeholders — check spelling/capitalization exactly.', 'error');
+        } else {
+          setStatus('docxStatus', 'Template loaded and placeholders found.', 'ok');
+        }
+        checkReady();
+      })
+      .catch(function(err){
+        docxTemplateText = "";
+        setStatus('docxStatus', 'Error reading document: ' + err.message, 'error');
+        checkReady();
+      });
+  };
+  reader.readAsArrayBuffer(file);
+}
+document.getElementById('docxInput').addEventListener('change', e => handleDocxFile(e.target.files[0]));
+setupDragDrop('dropDocx', 'docxInput', handleDocxFile);
+
+function setupDragDrop(boxId, inputId, handler){
+  const box = document.getElementById(boxId);
+  box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('dragover'); });
+  box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+  box.addEventListener('drop', e => {
+    e.preventDefault();
+    box.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+  });
+}
+
+// ================= Generate =================
+document.getElementById('generateBtn').addEventListener('click', function(){
+  setStatus('genStatus','','');
+  sentSet.clear();
+  const templateText = currentTemplateText();
+  const mode = document.querySelector('input[name="subjMode"]:checked').value;
+  const cityFilter = document.getElementById('cityInput').value.trim();
+  const customSubject = document.getElementById('customSubjectInput').value.trim();
+
+  if (mode === 'city' && !cityFilter){
+    setStatus('genStatus', 'Enter a city to filter the subject line by.', 'error');
+    return;
+  }
+  if (mode === 'custom' && !customSubject){
+    setStatus('genStatus', 'Enter the subject line to use for every email.', 'error');
+    return;
+  }
+  if (!hasPlaceholders(templateText)){
+    setStatus('genStatus', 'Heads up: the template is missing "NAME" and/or "ADDRESS" placeholders, so those values won\u2019t be filled in per contact. Drafts were still generated.', 'warn');
+  }
+
+  // group by email
+  const map = new Map();
+  contacts.forEach(c => {
+    const key = c.email.toLowerCase();
+    if (!map.has(key)){
+      map.set(key, {email:c.email, name:c.name, addresses:[]});
+    }
+    map.get(key).addresses.push({address:c.address, city:c.city});
+  });
+  grouped = Array.from(map.values());
+
+  generatedResults = grouped.map(g => {
+    const addrList = g.addresses.map(a=>a.address).filter(Boolean);
+    const bodyAddrBlock = addrList.map(a => '-' + a).join('\n');
+    let body = templateText
+      .split('ADDRESS(ES)').join(bodyAddrBlock)
+      .replace(/\bADDRESS\b/g, bodyAddrBlock)
+      .replace(/\bNAME\b/g, g.name || '');
+
+    let subject;
+    if (mode === 'custom'){
+      subject = customSubject;
+    } else if (mode === 'addresses'){
+      subject = addrList.join(', ');
+    } else { // city
+      const cf = cityFilter.trim().toLowerCase();
+      const cityAddrs = g.addresses.filter(a => {
+        const c = (a.city || '').trim().toLowerCase();
+        return c && (c === cf || c.includes(cf) || cf.includes(c));
+      }).map(a => a.address).filter(Boolean);
+      subject = cityAddrs.length
+        ? cityFilter + ' - ' + cityAddrs.join(' | ')
+        : cityFilter + ' - (no matching addresses found)';
+    }
+
+    const mailto = 'mailto:' + encodeURIComponent(g.email) +
+      '?subject=' + encodeURIComponent(subject) +
+      '&body=' + encodeURIComponent(body);
+
+    const sentKey = 'tsg_sent_' + g.email.toLowerCase() + '|' + subject;
+
+    return {name:g.name, email:g.email, subject, body, mailto, sentKey};
+  });
+
+  renderResults(true);
+});
+
+let sentSet = new Set();
+
+// Clears generated drafts and the results panel — called whenever the contact
+// list changes so stale drafts can never be mixed with a new upload.
+function clearDrafts(){
+  generatedResults = [];
+  sentSet.clear();
+  document.getElementById('resultList').innerHTML = '';
+  document.getElementById('results').style.display = 'none';
+  setStatus('genStatus', '', '');
+}
+
+// Full page reset: wipe the saved list and reload for a clean slate.
+document.getElementById('resetPageBtn').addEventListener('click', function(){
+  try { localStorage.removeItem('tsg_outreach_finalized'); } catch (err) {}
+  location.reload();
+});
+
+function isSent(sentKey){
+  return sentSet.has(sentKey);
+}
+
+function renderResults(scrollTo){
+  const list = document.getElementById('resultList');
+  list.innerHTML = '';
+  generatedResults.forEach((r, idx) => {
+    const sent = isSent(r.sentKey);
+    const row = document.createElement('div');
+    row.className = 'result-row' + (sent ? ' sent' : '');
+    row.innerHTML = `
+      <div class="result-meta">
+        <div class="name">${escapeHtml(r.name || '(no name)')}${sent ? '<span class="sent-badge">&#10003; Sent</span>' : ''}</div>
+        <div class="email">${escapeHtml(r.email)}</div>
+        <div class="subj"><b>Subject:</b> ${escapeHtml(r.subject)}</div>
+        <details>
+          <summary>Preview body</summary>
+          <pre>${escapeHtml(r.body)}</pre>
+        </details>
+      </div>
+      <div class="result-actions">
+        <a class="compose-btn" href="${r.mailto}" target="_blank" rel="noopener" data-key="${escapeHtml(r.sentKey)}">${sent ? 'Open again' : 'Open draft'}</a>
+        <button type="button" class="copy-btn" data-idx="${idx}">Copy body</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.compose-btn').forEach(btn => {
+    btn.addEventListener('click', function(){
+      sentSet.add(this.dataset.key);
+      setTimeout(() => renderResults(false), 150);
+    });
+  });
+  list.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', function(){
+      const r = generatedResults[Number(this.dataset.idx)];
+      navigator.clipboard.writeText(r.body).then(() => {
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = 'Copy body'; }, 1500);
+      });
+    });
+  });
+  const sentCount = generatedResults.filter(r => isSent(r.sentKey)).length;
+  document.getElementById('resultCount').textContent = `${generatedResults.length} draft${generatedResults.length===1?'':'s'} ready — ${sentCount} marked sent`;
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('toggleAllBtn').textContent = 'Expand all previews';
+  if (scrollTo) document.getElementById('results').scrollIntoView({behavior:'smooth'});
+}
+
+document.getElementById('toggleAllBtn').addEventListener('click', function(){
+  const allDetails = document.querySelectorAll('#resultList details');
+  const anyClosed = Array.from(allDetails).some(d => !d.open);
+  allDetails.forEach(d => d.open = anyClosed);
+  this.textContent = anyClosed ? 'Collapse all previews' : 'Expand all previews';
+});
+
+document.getElementById('resetSentBtn').addEventListener('click', function(){
+  sentSet.clear();
+  renderResults(false);
+});
+
+function escapeHtml(str){
+  return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+document.getElementById('downloadBtn').addEventListener('click', function(){
+  const rowsHtml = generatedResults.map(r => `
+    <div style="border:1px solid #E2DFDB;border-radius:8px;padding:16px;margin-bottom:12px;">
+      <div style="font-weight:700;color:#074A75;">${escapeHtml(r.name || '(no name)')}</div>
+      <div style="font-size:12.5px;color:#6b7280;">${escapeHtml(r.email)}</div>
+      <div style="font-size:13px;margin-top:6px;"><b>Subject:</b> ${escapeHtml(r.subject)}</div>
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#FAF8F6;padding:10px;border-radius:6px;margin-top:6px;border:1px solid #E2DFDB;">${escapeHtml(r.body)}</pre>
+      <a href="${r.mailto}" style="display:inline-block;margin-top:8px;background:#F47D48;color:#fff;text-decoration:none;padding:9px 14px;border-radius:6px;font-size:13px;font-weight:600;">Open draft</a>
+    </div>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TSG Draft Emails</title></head>
+  <body style="font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#1B2530;">
+  <h2 style="color:#074A75;">TSG Draft Emails (${generatedResults.length})</h2>
+  ${rowsHtml}
+  </body></html>`;
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'tsg-draft-emails.html';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ================= Restore a previously finalized list =================
+(function restoreFinalized(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('tsg_outreach_finalized') || 'null'); } catch (err) {}
+  if (!saved || !Array.isArray(saved.rows) || !saved.rows.length) return;
+  extractedRows = saved.rows.map(r => ({
+    address: r.address || '', propertyName: r.propertyName || '', leasingCompany: r.leasingCompany || '',
+    firstName: r.firstName || '', lastName: r.lastName || '', email: r.email || '',
+    city: r.city || '', state: r.state || '', zip: r.zip || ''
+  }));
+  renderReviewTable();
+  if (finalizeContacts(true)){
+    const when = new Date(saved.at);
+    setStatus('finalizeStatus', 'Loaded ' + contacts.length + ' contacts finalized ' + when.toLocaleString() + '. Edit and re-finalize, or use "Start over" to clear.', 'ok');
+  }
+})();
+</script>
+
+</body>
+</html>
