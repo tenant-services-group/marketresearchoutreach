@@ -610,7 +610,9 @@ let grouped = [];          // [{email, name, addresses:[{address, city}]}]
 let generatedResults = [];
 
 // ================= Phase 1: PDF extraction =================
-// Parser functions below are verbatim from the PDF-to-Excel extractor — do not modify.
+// Parser functions below are verbatim from the PDF-to-Excel extractor, with ONE
+// sanctioned change (July 2026): finalizeSection harvests contacts only from the
+// "Primary Leasing Company" section — no fallback to Property Manager / True Owner.
 const STATE_MAP = {
   "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO",
   "Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID",
@@ -680,6 +682,10 @@ async function getPageWords(page){
 
 function finalizeSection(ctx){
   if (!ctx.current || !ctx.currentSection) return;
+  // Only the Primary Leasing Company section populates contact fields.
+  // Property Manager / True Owner remain as boundaries only — if the primary
+  // section is blank or absent, the row stays blank for manual entry.
+  if (ctx.currentSection !== 'Primary Leasing Company') { ctx.currentSection = null; ctx.sectionWords = []; return; }
   if (ctx.current._chosen) { ctx.currentSection = null; ctx.sectionWords = []; return; }
   const zoneA = ctx.sectionWords.filter(w => zoneOf(w.x) === 'A');
   const zoneB = ctx.sectionWords.filter(w => zoneOf(w.x) === 'B');
