@@ -582,6 +582,10 @@
   <div class="card">
     <h2><span class="step-num">5</span> Generate</h2>
     <p class="hint">This builds one draft per unique email address, combining every property address tied to that contact.</p>
+    <div class="field-item" style="margin-bottom:12px;">
+      <label for="projectName">Project name &mdash; saves this send for response reports (optional)</label>
+      <input type="text" id="projectName" placeholder="e.g. Dallas Retail &mdash; Jul 2026" maxlength="120">
+    </div>
     <button class="primary" id="generateBtn" disabled>Generate drafts</button>
     <div class="status" id="genStatus"></div>
   </div>
@@ -597,6 +601,14 @@
       </span>
     </div>
     <div id="resultList"></div>
+  </div>
+
+  <div class="card" id="projectsCard">
+    <h2 style="margin-bottom:4px;">Saved projects</h2>
+    <p class="hint">Sends saved with a project name. Response reports will build on these.</p>
+    <button type="button" class="link-btn" id="loadProjectsBtn">Load projects</button>
+    <div id="projectsList" style="margin-top:12px;"></div>
+    <div class="status" id="projectsStatus"></div>
   </div>
 
 </main>
@@ -1360,6 +1372,76 @@ document.getElementById('generateBtn').addEventListener('click', function(){
   });
 
   renderResults(true);
+  saveProject();
+});
+
+// ================= Projects (phase 1: save at generate time) =================
+let currentProjectId = null;
+
+async function saveProject(){
+  currentProjectId = null;
+  const name = document.getElementById('projectName').value.trim();
+  if (!name || !generatedResults.length) return;
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        subjects: Array.from(new Set(generatedResults.map(r => r.subject))).slice(0, 50),
+        drafts: generatedResults.map(r => ({ email: r.email, name: r.name, subject: r.subject }))
+      })
+    });
+    const data = await res.json();
+    if (data.ok){
+      currentProjectId = data.id;
+      setStatus('genStatus', 'Project "' + name + '" saved with ' + generatedResults.length + ' drafts.', 'ok');
+    } else {
+      setStatus('genStatus', 'Drafts are ready, but the project didn\u2019t save: ' + (data.error || 'unknown error'), 'warn');
+    }
+  } catch (err) {
+    setStatus('genStatus', 'Drafts are ready, but the project didn\u2019t save \u2014 the projects API isn\u2019t reachable yet.', 'warn');
+  }
+}
+
+function reportOpened(email){
+  if (!currentProjectId) return;
+  fetch('/api/projects/' + encodeURIComponent(currentProjectId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ openedEmails: [email] })
+  }).catch(function(){ /* fire-and-forget */ });
+}
+
+document.getElementById('loadProjectsBtn').addEventListener('click', async function(){
+  setStatus('projectsStatus', 'Loading\u2026', '');
+  const list = document.getElementById('projectsList');
+  list.innerHTML = '';
+  try {
+    const res = await fetch('/api/projects');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed to load projects.');
+    if (!data.projects.length){
+      setStatus('projectsStatus', 'No saved projects yet \u2014 add a project name in step 5 before generating.', '');
+      return;
+    }
+    data.projects.forEach(pr => {
+      const row = document.createElement('div');
+      row.className = 'result-row';
+      const when = pr.createdAt ? new Date(pr.createdAt).toLocaleString() : '';
+      row.innerHTML = '<div class="result-meta">' +
+        '<div class="name">' + escapeHtml(pr.name) + '</div>' +
+        '<div class="email">' + escapeHtml(when) + '</div>' +
+        '<div class="subj">' + pr.draftCount + ' draft' + (pr.draftCount === 1 ? '' : 's') + ' \u2014 ' + pr.openedCount + ' opened</div>' +
+        '</div>';
+      list.appendChild(row);
+    });
+    setStatus('projectsStatus', '', '');
+  } catch (err) {
+    setStatus('projectsStatus', err.message.indexOf('STORAGE') !== -1 || err.message.indexOf('configured') !== -1
+      ? err.message
+      : 'Couldn\u2019t load projects \u2014 the projects API isn\u2019t deployed or configured yet.', 'error');
+  }
 });
 
 let sentSet = new Set();
@@ -1411,6 +1493,8 @@ function renderResults(scrollTo){
   list.querySelectorAll('.compose-btn').forEach(btn => {
     btn.addEventListener('click', function(){
       sentSet.add(this.dataset.key);
+      const r = generatedResults.find(x => x.sentKey === this.dataset.key);
+      if (r) reportOpened(r.email);
       setTimeout(() => renderResults(false), 150);
     });
   });
