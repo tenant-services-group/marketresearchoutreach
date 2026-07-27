@@ -1,20 +1,20 @@
 'use strict';
 /**
- * /api/monday — Monday.com sync for extracted properties.
+ * /api/monday — Monday.com board listing + property sync.
  *
  *   GET  /api/monday/boards → { ok, workspaces:[{id,name}], boards:[{id,name,workspaceId,url}] }
  *   POST /api/monday/sync   → body:
  *        { target: {type:'new', workspaceId, name} | {type:'existing', boardId},
- *          rows: [{address, propertyName, leasingCompany, firstName, lastName, email, city, state, zip}] }
+ *          rows: [{address, propertyName, leasingCompany, firstName, lastName, email, city}] }
  *        → { ok, boardId, boardUrl, created, failed:[{address, error}] }
  *
- * Requires App Setting: MONDAY_API_TOKEN (Monday → avatar → Developers → My access tokens).
- * Debug: DEBUG_RESPONSE=true adds error detail to responses.
+ * Boards use the canonical Research Outreach schema (see shared/monday-client.js).
+ * Synced items get Email Status "*Email Sent" and Emails Sent = today.
  */
 
 const { app } = require('@azure/functions');
+const { monday, createBoard, ensureColumns, createItem } = require('../shared/monday-client');
 
-const MONDAY_URL = 'https://api.monday.com/v2';
 const MAX_ROWS = 500;
 
 const clean = (v, max) =>
@@ -29,43 +29,6 @@ const json = (status, body) => ({
 const debugInfo = (err) =>
   process.env.DEBUG_RESPONSE === 'true' ? String(err && err.message).slice(0, 600) : undefined;
 
-async function monday(query, variables) {
-  const token = process.env.MONDAY_API_TOKEN;
-  if (!token) {
-    const err = new Error('MONDAY_API_TOKEN is not configured on the Static Web App.');
-    err.statusCode = 503;
-    throw err;
-  }
-  const res = await fetch(MONDAY_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': token,
-      'API-Version': '2024-10',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  const data = await res.json();
-  if (data.errors && data.errors.length) {
-    throw new Error(data.errors.map(e => e.message).join('; '));
-  }
-  if (data.error_message) throw new Error(data.error_message);
-  return data.data;
-}
-
-// Standard column set created on new boards and ensured on existing ones (matched by title)
-const COLUMNS = [
-  { key: 'propertyName',   title: 'Property Name',   type: 'text' },
-  { key: 'leasingCompany', title: 'Leasing Company', type: 'text' },
-  { key: 'contact',        title: 'Contact',         type: 'text' },
-  { key: 'email',          title: 'Email',           type: 'email' },
-  { key: 'city',           title: 'City',            type: 'text' },
-  { key: 'state',          title: 'State',           type: 'text' },
-  { key: 'zip',            title: 'Zip',             type: 'text' },
-  { key: 'status',         title: 'Status',          type: 'status' },
-  { key: 'dateSent',       title: 'Date Sent',       type: 'date' },
-];
-
 app.http('monday', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',
@@ -78,12 +41,12 @@ app.http('monday', {
       return json(404, { ok: false, error: 'Unknown action.' });
     } catch (err) {
       context.error('monday API error:', err.message);
-      const status = err.statusCode === 503 ? 503 : 500;
+      const status = err.statusCode === 503 ? 503 : (err.statusCode === 404 ? 404 : 500);
       return json(status, {
         ok: false,
         error: status === 503
           ? 'Monday.com is not connected yet. Add MONDAY_API_TOKEN in the Static Web App settings.'
-          : 'Monday.com sync failed: ' + String(err.message).slice(0, 300),
+          : 'Monday.com request failed: ' + String(err.message).slice(0, 300),
         debug: debugInfo(err),
       });
     }
@@ -121,28 +84,18 @@ async function syncRows(request, context) {
     address:        clean(r.address, 255),
     propertyName:   clean(r.propertyName, 255),
     leasingCompany: clean(r.leasingCompany, 255),
-    contact:        (clean(r.firstName, 100) + ' ' + clean(r.lastName, 100)).trim(),
+    firstName:      clean(r.firstName, 100),
+    lastName:       clean(r.lastName, 100),
     email:          clean(r.email, 254),
     city:           clean(r.city, 100),
-    state:          clean(r.state, 50),
-    zip:            clean(r.zip, 20),
   })).filter(r => r.address || r.propertyName);
   if (!rows.length) return json(400, { ok: false, error: 'No rows with a property address were provided.' });
 
-  // Resolve the board
   let boardId, boardUrl;
   if (target.type === 'new') {
     const name = clean(target.name, 120);
     if (!name) return json(400, { ok: false, error: 'Board name is required for a new board.' });
-    const vars = { name };
-    let q = 'mutation ($name: String!) { create_board (board_name: $name, board_kind: public) { id url } }';
-    if (target.workspaceId) {
-      vars.ws = String(target.workspaceId);
-      q = 'mutation ($name: String!, $ws: ID!) { create_board (board_name: $name, board_kind: public, workspace_id: $ws) { id url } }';
-    }
-    const data = await monday(q, vars);
-    boardId = String(data.create_board.id);
-    boardUrl = data.create_board.url;
+    ({ boardId, boardUrl } = await createBoard(name, target.workspaceId));
   } else if (target.type === 'existing') {
     boardId = clean(target.boardId, 30);
     if (!boardId) return json(400, { ok: false, error: 'boardId is required for an existing board.' });
@@ -150,32 +103,10 @@ async function syncRows(request, context) {
     return json(400, { ok: false, error: 'target.type must be "new" or "existing".' });
   }
 
-  // Fetch current columns; create any missing standard columns; map key → column id
-  const boardData = await monday(
-    'query ($id: [ID!]) { boards (ids: $id) { id url columns { id title type } } }',
-    { id: [boardId] }
-  );
-  const board = boardData.boards && boardData.boards[0];
-  if (!board) return json(404, { ok: false, error: 'Board not found or the token has no access to it.' });
-  boardUrl = boardUrl || board.url;
+  const ensured = await ensureColumns(boardId);
+  const colId = ensured.colId;
+  boardUrl = boardUrl || ensured.boardUrl;
 
-  const byTitle = {};
-  (board.columns || []).forEach(c => { byTitle[c.title.trim().toLowerCase()] = c; });
-  const colId = {};
-  for (const col of COLUMNS) {
-    const existing = byTitle[col.title.toLowerCase()];
-    if (existing) {
-      colId[col.key] = existing.id;
-    } else {
-      const created = await monday(
-        'mutation ($board: ID!, $title: String!, $type: ColumnType!) { create_column (board_id: $board, title: $title, column_type: $type) { id } }',
-        { board: boardId, title: col.title, type: col.type }
-      );
-      colId[col.key] = created.create_column.id;
-    }
-  }
-
-  // Create items sequentially (Monday complexity budget); collect per-row failures
   const today = new Date().toISOString().slice(0, 10);
   let created = 0;
   const failed = [];
@@ -183,19 +114,15 @@ async function syncRows(request, context) {
     const r = rows[i];
     const cv = {};
     cv[colId.propertyName]   = r.propertyName;
+    if (r.email) cv[colId.contactEmail] = { email: r.email, text: r.email };
+    cv[colId.emailStatus]    = { label: '*Email Sent' };
+    cv[colId.emailsSent]     = { date: today };
     cv[colId.leasingCompany] = r.leasingCompany;
-    cv[colId.contact]        = r.contact;
-    if (r.email) cv[colId.email] = { email: r.email, text: r.email };
-    cv[colId.city]  = r.city;
-    cv[colId.state] = r.state;
-    cv[colId.zip]   = r.zip;
-    cv[colId.status]   = { label: 'Sent' };
-    cv[colId.dateSent] = { date: today };
+    cv[colId.firstName]      = r.firstName;
+    cv[colId.lastName]       = r.lastName;
+    cv[colId.city]           = r.city;
     try {
-      await monday(
-        'mutation ($board: ID!, $name: String!, $cv: JSON!) { create_item (board_id: $board, item_name: $name, column_values: $cv, create_labels_if_missing: true) { id } }',
-        { board: boardId, name: r.address || r.propertyName || ('Property ' + (i + 1)), cv: JSON.stringify(cv) }
-      );
+      await createItem(boardId, r.address || r.propertyName || ('Property ' + (i + 1)), cv);
       created++;
     } catch (err) {
       failed.push({ address: r.address || r.propertyName, error: String(err.message).slice(0, 200) });
