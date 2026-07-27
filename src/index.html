@@ -7,7 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/msal-browser/3.28.1/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
 <style>
   :root{
     --navy:#074A75;
@@ -1747,7 +1747,7 @@ async function ensureEntra(){
     },
     cache: { cacheLocation: 'sessionStorage' }
   });
-  await msalApp.initialize();
+  if (typeof msalApp.initialize === 'function') await msalApp.initialize();
   return true;
 }
 
