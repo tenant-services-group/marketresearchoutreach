@@ -22,10 +22,12 @@
  */
 
 const { app } = require('@azure/functions');
-const { createBoard, ensureColumns, listItems, createItem, updateItem } = require('../shared/monday-client');
+const { createBoard, ensureColumns, listItems, createItem, updateItem, addFileToItem } = require('../shared/monday-client');
 
 const MAX_REPLIES = 50;
 const MAX_BODY = 12000;
+const MAX_FILES_PER_REPLY = 3;
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB per attachment
 
 const clean = (v, max) =>
   String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -135,6 +137,10 @@ async function processReplies(request, context) {
       subject: clean(r.subject, 500),
       bodyText: String(r.bodyText == null ? '' : r.bodyText).slice(0, MAX_BODY),
       addresses: (Array.isArray(r.addresses) ? r.addresses : []).map(a => clean(a, 255)).filter(Boolean),
+      attachments: (Array.isArray(r.attachments) ? r.attachments : [])
+        .map(a => ({ name: clean(a && a.name, 200) || 'attachment.pdf', contentBytes: String((a && a.contentBytes) || '') }))
+        .filter(a => a.contentBytes && a.contentBytes.length <= Math.ceil(MAX_FILE_BYTES * 4 / 3) + 8)
+        .slice(0, MAX_FILES_PER_REPLY),
     }))
     .filter(r => r.fromEmail && r.bodyText);
   if (!replies.length) return json(400, { ok: false, error: 'No replies were provided.' });
@@ -179,9 +185,17 @@ async function processReplies(request, context) {
     cv[colId.emailStatus]       = { label: '*Email Received' };
     cv[colId.eliminationReason] = { label: 'Pending' };
     cv[colId.emailReceivedDate] = { date: receivedDate };
-    if (extract.notes)         cv[colId.notes] = { text: extract.notes };
+    // Link column: only when a URL was actually in the reply body.
+    // Attached files go to the item's File column (uploaded below).
+    const flyerUrl = extract.flyerLinks[0] || '';
+    const attachmentNames = reply.attachments.map(a => a.name);
+    let notes = extract.notes;
+    if (attachmentNames.length) {
+      notes = (notes ? notes + ' ' : '') + '[Attachments: ' + attachmentNames.join(', ') + ']';
+    }
+    if (notes)                 cv[colId.notes] = { text: notes.slice(0, 2000) };
     if (extract.squareFootage) cv[colId.squareFootage] = extract.squareFootage;
-    if (extract.flyerLinks.length) cv[colId.flyerLink] = { url: extract.flyerLinks[0], text: 'Flyer' };
+    if (flyerUrl)              cv[colId.flyerLink] = { url: flyerUrl, text: 'Flyer' };
 
     const addresses = reply.addresses.length ? reply.addresses : ['(no address matched)'];
     for (const address of addresses) {
@@ -189,9 +203,10 @@ async function processReplies(request, context) {
         address,
         fromEmail: reply.fromEmail,
         receivedAt: receivedDate,
-        notes: extract.notes,
+        notes,
         squareFootage: extract.squareFootage,
-        flyerLink: extract.flyerLinks[0] || '',
+        flyerLink: flyerUrl,
+        attachments: attachmentNames.join(', '),
       };
       if (address === '(no address matched)') {
         unmatched.push({ fromEmail: reply.fromEmail, subject: reply.subject });
@@ -199,16 +214,24 @@ async function processReplies(request, context) {
         continue;
       }
       try {
-        const existing = itemByName[address.trim().toLowerCase()];
-        if (existing) {
-          await updateItem(boardId, existing, cv);
+        let itemId = itemByName[address.trim().toLowerCase()];
+        if (itemId) {
+          await updateItem(boardId, itemId, cv);
           updated++;
         } else {
           const createCv = Object.assign({}, cv);
           if (reply.fromEmail) createCv[colId.contactEmail] = { email: reply.fromEmail, text: reply.fromEmail };
-          const newId = await createItem(boardId, address, createCv);
-          itemByName[address.trim().toLowerCase()] = newId;
+          itemId = await createItem(boardId, address, createCv);
+          itemByName[address.trim().toLowerCase()] = itemId;
           createdItems++;
+        }
+        for (const att of reply.attachments) {
+          try {
+            await addFileToItem(itemId, colId.file, att.name, Buffer.from(att.contentBytes, 'base64'));
+          } catch (err) {
+            failed.push({ address, error: 'File "' + att.name + '": ' + String(err.message).slice(0, 150) });
+            context.error('file upload failed:', err.message);
+          }
         }
         results.push(rowResult);
       } catch (err) {
