@@ -43,6 +43,7 @@ const COLUMNS = [
   { key: 'notes',             title: 'Notes',                type: 'long_text' },
   { key: 'squareFootage',     title: 'Square footage',       type: 'text' },
   { key: 'flyerLink',         title: 'Flyer Link',           type: 'link' },
+  { key: 'file',              title: 'File',                 type: 'file', aliases: ['files'] },
   { key: 'emailsSent',        title: 'Emails Sent',          type: 'date' },
   { key: 'followUpDate',      title: 'Follow Up Date',       type: 'date' },
   { key: 'emailReceivedDate', title: 'Email Received Date',  type: 'date' },
@@ -83,7 +84,8 @@ async function ensureColumns(boardId) {
   (board.columns || []).forEach(c => { byTitle[c.title.trim().toLowerCase()] = c; });
   const colId = {};
   for (const col of COLUMNS) {
-    const existing = byTitle[col.title.toLowerCase()];
+    const titles = [col.title.toLowerCase()].concat(col.aliases || []);
+    const existing = titles.map(t => byTitle[t]).find(Boolean);
     if (existing) {
       colId[col.key] = existing.id;
     } else {
@@ -122,4 +124,29 @@ async function updateItem(boardId, itemId, columnValues) {
   );
 }
 
-module.exports = { monday, COLUMNS, createBoard, ensureColumns, listItems, createItem, updateItem };
+/** Upload a file to an item's file column (Monday multipart endpoint). */
+async function addFileToItem(itemId, columnId, filename, buffer) {
+  const token = process.env.MONDAY_API_TOKEN;
+  if (!token) {
+    const err = new Error('MONDAY_API_TOKEN is not configured on the Static Web App.');
+    err.statusCode = 503;
+    throw err;
+  }
+  const fd = new FormData();
+  fd.append('query',
+    'mutation ($file: File!) { add_file_to_column (item_id: ' + Number(itemId) +
+    ', column_id: ' + JSON.stringify(String(columnId)) + ', file: $file) { id } }');
+  fd.append('variables[file]', new Blob([buffer]), filename || 'attachment.pdf');
+  const res = await fetch('https://api.monday.com/v2/file', {
+    method: 'POST',
+    headers: { 'Authorization': token, 'API-Version': '2024-10' },
+    body: fd,
+  });
+  const data = await res.json();
+  if (data.errors && data.errors.length) {
+    throw new Error(data.errors.map(e => e.message).join('; '));
+  }
+  return data.data;
+}
+
+module.exports = { monday, COLUMNS, createBoard, ensureColumns, listItems, createItem, updateItem, addFileToItem };
