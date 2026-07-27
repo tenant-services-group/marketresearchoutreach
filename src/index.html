@@ -446,7 +446,10 @@
     <h1>Market Research Outreach</h1>
     <p>Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.</p>
   </div>
-  <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh">Reset all</button>
+  <span style="display:flex; gap:8px; align-items:center;">
+    <button type="button" class="link-btn" id="signInBtn" title="Sign in to save projects under your name and read replies">Sign in</button>
+    <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh">Reset all</button>
+  </span>
 </div>
 
 <main>
@@ -532,6 +535,10 @@
         </div>
       </div>
       <div class="fields-grid" id="mondayExistingFields" style="display:none;">
+        <div class="field-item">
+          <label for="mondayBoardFilter">Search boards</label>
+          <input type="text" id="mondayBoardFilter" placeholder="Type to filter&hellip;">
+        </div>
         <div class="field-item">
           <label for="mondayBoard">Board</label>
           <select id="mondayBoard"></select>
@@ -655,6 +662,7 @@
     <h2 style="margin-bottom:4px;">Saved projects</h2>
     <p class="hint">Sends saved with a project name. Response reports will build on these.</p>
     <button type="button" class="link-btn" id="loadProjectsBtn">Load projects</button>
+    <label style="font-size:13px; margin-left:10px; cursor:pointer;"><input type="checkbox" id="showAllProjects" style="accent-color:var(--orange);"> Show everyone's projects</label>
     <div id="projectsList" style="margin-top:12px;"></div>
     <div class="status" id="projectsStatus"></div>
   </div>
@@ -669,7 +677,7 @@
       </div>
       <div class="field-item">
         <label>&nbsp;</label>
-        <button type="button" class="link-btn" id="respSignInBtn" style="width:100%;">Sign in with Microsoft</button>
+        <span class="hint" id="respSignInHint" style="display:block; padding-top:9px;">Sign in (top of the page) to search your mailbox.</span>
       </div>
     </div>
     <button type="button" class="primary" id="respFetchBtn" style="width:auto; margin-top:4px;" disabled>Check for replies</button>
@@ -682,6 +690,10 @@
         <label><input type="radio" name="respTarget" value="new"> Create a new board</label>
       </div>
       <div class="fields-grid" id="respExistingFields">
+        <div class="field-item">
+          <label for="respBoardFilter">Search boards</label>
+          <input type="text" id="respBoardFilter" placeholder="Type to filter&hellip;">
+        </div>
         <div class="field-item">
           <label for="respBoard">Board</label>
           <select id="respBoard"></select>
@@ -1096,6 +1108,16 @@ document.getElementById('startOverBtn').addEventListener('click', function(){
 // ================= Monday.com sync =================
 let mondayLoaded = false;
 
+let boardsCache = [];
+
+function fillBoardSelect(selectId, filter){
+  const q = (filter || '').trim().toLowerCase();
+  const matches = q ? boardsCache.filter(b => b.name.toLowerCase().indexOf(q) !== -1) : boardsCache;
+  document.getElementById(selectId).innerHTML =
+    matches.map(b => '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.name) + '</option>').join('') ||
+    '<option value="">(no matching boards)</option>';
+}
+
 async function loadMondayLists(){
   const res = await fetch('/api/monday/boards');
   const data = await res.json();
@@ -1103,11 +1125,17 @@ async function loadMondayLists(){
   const ws = document.getElementById('mondayWorkspace');
   ws.innerHTML = '<option value="">(default workspace)</option>' +
     data.workspaces.map(w => '<option value="' + escapeHtml(w.id) + '">' + escapeHtml(w.name) + '</option>').join('');
-  const bd = document.getElementById('mondayBoard');
-  bd.innerHTML = data.boards.map(b => '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.name) + '</option>').join('') ||
-    '<option value="">(no boards found)</option>';
+  boardsCache = data.boards;
+  fillBoardSelect('mondayBoard', document.getElementById('mondayBoardFilter').value);
   mondayLoaded = true;
 }
+
+document.getElementById('mondayBoardFilter').addEventListener('input', function(){
+  fillBoardSelect('mondayBoard', this.value);
+});
+document.getElementById('respBoardFilter').addEventListener('input', function(){
+  fillBoardSelect('respBoard', this.value);
+});
 
 document.getElementById('mondayOpenBtn').addEventListener('click', async function(){
   const panel = document.getElementById('mondayPanel');
@@ -1558,6 +1586,7 @@ async function saveProject(){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
+        owner: currentUser(),
         subjects: Array.from(new Set(generatedResults.map(r => r.subject))).slice(0, 50),
         drafts: generatedResults.map(r => ({ email: r.email, name: r.name, subject: r.subject }))
       })
@@ -1583,16 +1612,19 @@ function reportOpened(email){
   }).catch(function(){ /* fire-and-forget */ });
 }
 
-document.getElementById('loadProjectsBtn').addEventListener('click', async function(){
+async function loadProjects(){
   setStatus('projectsStatus', 'Loading\u2026', '');
   const list = document.getElementById('projectsList');
   list.innerHTML = '';
   try {
-    const res = await fetch('/api/projects');
+    const showAll = document.getElementById('showAllProjects').checked;
+    const me = currentUser();
+    const qs = (!showAll && me) ? ('?owner=' + encodeURIComponent(me)) : '';
+    const res = await fetch('/api/projects' + qs);
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Failed to load projects.');
     if (!data.projects.length){
-      setStatus('projectsStatus', 'No saved projects yet \u2014 add a project name in step 5 before generating.', '');
+      setStatus('projectsStatus', (qs ? 'No projects saved under your account yet \u2014 check "Show everyone\u2019s projects" for the full list, or ' : 'No saved projects yet \u2014 ') + 'add a project name in step 5 before generating.', '');
       return;
     }
     data.projects.forEach(pr => {
@@ -1601,10 +1633,31 @@ document.getElementById('loadProjectsBtn').addEventListener('click', async funct
       const when = pr.createdAt ? new Date(pr.createdAt).toLocaleString() : '';
       row.innerHTML = '<div class="result-meta">' +
         '<div class="name">' + escapeHtml(pr.name) + '</div>' +
-        '<div class="email">' + escapeHtml(when) + '</div>' +
+        '<div class="email">' + escapeHtml(when) + (pr.owner ? ' \u2014 ' + escapeHtml(pr.owner) : '') + '</div>' +
         '<div class="subj">' + pr.draftCount + ' draft' + (pr.draftCount === 1 ? '' : 's') + ' \u2014 ' + pr.openedCount + ' opened</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="result-actions"><button type="button" class="copy-btn proj-del" data-id="' + escapeHtml(pr.id) + '">Delete</button></div>';
       list.appendChild(row);
+    });
+    list.querySelectorAll('.proj-del').forEach(btn => {
+      btn.addEventListener('click', async function(){
+        if (this.dataset.confirm !== '1'){
+          this.dataset.confirm = '1';
+          this.textContent = 'Confirm delete?';
+          setTimeout(() => { this.dataset.confirm = ''; this.textContent = 'Delete'; }, 4000);
+          return;
+        }
+        this.disabled = true;
+        try {
+          const dres = await fetch('/api/projects/' + encodeURIComponent(this.dataset.id), { method: 'DELETE' });
+          const ddata = await dres.json();
+          if (!ddata.ok) throw new Error(ddata.error || 'Delete failed.');
+          loadProjects();
+        } catch (err) {
+          setStatus('projectsStatus', err.message, 'error');
+          this.disabled = false;
+        }
+      });
     });
     const sel = document.getElementById('respProject');
     sel.innerHTML = '<option value="">Choose a project\u2026</option>' +
@@ -1613,7 +1666,9 @@ document.getElementById('loadProjectsBtn').addEventListener('click', async funct
   } catch (err) {
     setStatus('projectsStatus', 'Couldn\u2019t load projects \u2014 the projects API isn\u2019t deployed or configured yet.', 'error');
   }
-});
+}
+document.getElementById('loadProjectsBtn').addEventListener('click', loadProjects);
+document.getElementById('showAllProjects').addEventListener('change', loadProjects);
 
 let sentSet = new Set();
 
@@ -1751,18 +1806,24 @@ async function ensureEntra(){
   return true;
 }
 
-document.getElementById('respSignInBtn').addEventListener('click', async function(){
+document.getElementById('signInBtn').addEventListener('click', async function(){
   try {
     if (!(await ensureEntra())) return;
     const result = await msalApp.loginPopup({ scopes: ['Mail.Read'] });
     msalAccount = result.account;
-    this.textContent = 'Signed in: ' + (msalAccount.username || 'account');
+    this.textContent = (msalAccount.username || 'Signed in').split('@')[0];
+    this.title = 'Signed in as ' + (msalAccount.username || '');
+    document.getElementById('respSignInHint').textContent = 'Signed in as ' + (msalAccount.username || '') + '.';
     setStatus('respStatus', '', '');
     updateRespReady();
   } catch (err) {
     setStatus('respStatus', 'Sign-in failed: ' + err.message, 'error');
   }
 });
+
+function currentUser(){
+  return msalAccount && msalAccount.username ? msalAccount.username.toLowerCase() : '';
+}
 
 document.getElementById('respProject').addEventListener('change', updateRespReady);
 
@@ -1810,7 +1871,7 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
 
     const token = await graphToken();
     const since = (respProjectDetail.createdAt || '').slice(0, 19) + 'Z';
-    let url = 'https://graph.microsoft.com/v1.0/me/messages?$select=from,subject,receivedDateTime,body' +
+    let url = 'https://graph.microsoft.com/v1.0/me/messages?$select=id,from,subject,receivedDateTime,body,hasAttachments,webLink' +
       '&$orderby=receivedDateTime desc&$top=50&$filter=receivedDateTime ge ' + encodeURIComponent(since);
     const messages = [];
     for (let page = 0; page < 8 && url; page++){
@@ -1833,12 +1894,16 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
         draft = respProjectDetail.drafts.find(d => d.email.toLowerCase() === sender && norm.indexOf(normalizeSubject(d.subject)) !== -1) || null;
       }
       respReplies.push({
+        id: m.id,
         fromEmail: sender,
         fromName: from.name || '',
         receivedAt: m.receivedDateTime || '',
         subject: m.subject || '',
         bodyText: (m.body && m.body.content) || '',
-        addresses: draft ? addressesFromSubject(draft.subject) : []
+        addresses: draft ? addressesFromSubject(draft.subject) : [],
+        hasAttachments: !!m.hasAttachments,
+        webLink: m.webLink || '',
+        attachments: []
       });
     });
     // keep only the latest reply per sender+subject
@@ -1850,28 +1915,31 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
       return true;
     }).slice(0, 50);
 
+    // Attachments: names + file bytes (\u226410MB, \u22643 per reply) so PDFs can be
+    // uploaded straight into the Monday item's File column
+    for (const r of respReplies){
+      if (!r.hasAttachments || !r.id) continue;
+      try {
+        const ares = await fetch('https://graph.microsoft.com/v1.0/me/messages/' + encodeURIComponent(r.id) +
+          '/attachments', { headers: { 'Authorization': 'Bearer ' + token } });
+        const adata = await ares.json();
+        r.attachments = (adata.value || [])
+          .filter(a => !a.isInline && a.contentBytes && (a.size || 0) <= 10 * 1024 * 1024)
+          .slice(0, 3)
+          .map(a => ({ name: a.name, contentBytes: a.contentBytes }));
+      } catch (err) { /* attachments are best-effort */ }
+    }
+
+    // Completed keys saved on the project survive page exits
+    const completedSet = new Set(respProjectDetail.completed || []);
+    respReplies.forEach(r => { r.key = r.fromEmail + '|' + normalizeSubject(r.subject); r.completed = completedSet.has(r.key); });
+
     if (!respReplies.length){
       setStatus('respStatus', 'No replies found from this project\u2019s contacts since it was sent.', 'warn');
       document.getElementById('respFound').style.display = 'none';
       return;
     }
-    const matched = respReplies.filter(r => r.addresses.length).length;
-    document.getElementById('respSummary').innerHTML =
-      '<b>' + respReplies.length + '</b> repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' found \u2014 <b>' +
-      matched + '</b> matched to properties' + (respReplies.length - matched ? ', ' + (respReplies.length - matched) + ' unmatched (custom subject)' : '') + '.';
-    const list = document.getElementById('respList');
-    list.innerHTML = '';
-    respReplies.forEach(r => {
-      const row = document.createElement('div');
-      row.className = 'result-row';
-      row.innerHTML = '<div class="result-meta">' +
-        '<div class="name">' + escapeHtml(r.fromName || r.fromEmail) + '</div>' +
-        '<div class="email">' + escapeHtml(r.fromEmail) + ' \u2014 ' + escapeHtml((r.receivedAt || '').slice(0, 10)) + '</div>' +
-        '<div class="subj">' + escapeHtml(r.addresses.join(' | ') || '(no address matched)') + '</div>' +
-        '<details><summary>Preview reply</summary><pre>' + escapeHtml(r.bodyText.slice(0, 1200)) + '</pre></details>' +
-        '</div>';
-      list.appendChild(row);
-    });
+    renderRespList();
     document.getElementById('respFound').style.display = 'block';
     setStatus('respStatus', '', '');
     if (!mondayLoaded) await loadMondayLists();
@@ -1883,8 +1951,47 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
   }
 });
 
+function renderRespList(){
+  const pending = respReplies.filter(r => !r.completed).length;
+  const matched = respReplies.filter(r => r.addresses.length).length;
+  document.getElementById('respSummary').innerHTML =
+    '<b>' + respReplies.length + '</b> repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' found \u2014 <b>' +
+    matched + '</b> matched to properties, <b>' + pending + '</b> pending upload' +
+    (respReplies.length - pending ? ', ' + (respReplies.length - pending) + ' completed (excluded)' : '') + '.';
+  const list = document.getElementById('respList');
+  list.innerHTML = '';
+  respReplies.forEach((r, idx) => {
+    const row = document.createElement('div');
+    row.className = 'result-row' + (r.completed ? ' sent' : '');
+    row.innerHTML = '<div class="result-meta">' +
+      '<div class="name">' + escapeHtml(r.fromName || r.fromEmail) + (r.completed ? '<span class="sent-badge">&#10003; Completed</span>' : '') + '</div>' +
+      '<div class="email">' + escapeHtml(r.fromEmail) + ' \u2014 ' + escapeHtml((r.receivedAt || '').slice(0, 10)) + '</div>' +
+      '<div class="subj">' + escapeHtml(r.addresses.join(' | ') || '(no address matched)') + '</div>' +
+      (r.attachments.length ? '<div class="subj">&#128206; ' + escapeHtml(r.attachments.map(a => a.name).join(', ')) + '</div>' : '') +
+      '<details><summary>Preview reply</summary><pre>' + escapeHtml(r.bodyText.slice(0, 1200)) + '</pre></details>' +
+      '</div>' +
+      '<div class="result-actions"><button type="button" class="copy-btn resp-done" data-idx="' + idx + '">' + (r.completed ? 'Mark pending' : 'Mark completed') + '</button></div>';
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.resp-done').forEach(btn => {
+    btn.addEventListener('click', async function(){
+      const r = respReplies[Number(this.dataset.idx)];
+      const marking = !r.completed;
+      r.completed = marking;
+      renderRespList();
+      try {
+        await fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(marking ? { addCompleted: [r.key] } : { removeCompleted: [r.key] })
+        });
+      } catch (err) { /* state already reflected locally; saved next time */ }
+    });
+  });
+}
+
 function syncRespBoardLists(){
-  document.getElementById('respBoard').innerHTML = document.getElementById('mondayBoard').innerHTML;
+  fillBoardSelect('respBoard', document.getElementById('respBoardFilter').value);
   document.getElementById('respWorkspace').innerHTML = document.getElementById('mondayWorkspace').innerHTML;
 }
 
@@ -1897,7 +2004,11 @@ document.querySelectorAll('input[name="respTarget"]').forEach(r => {
 });
 
 document.getElementById('respGoBtn').addEventListener('click', async function(){
-  if (!respReplies.length) return;
+  const pendingReplies = respReplies.filter(r => !r.completed);
+  if (!pendingReplies.length){
+    setStatus('respGoStatus', 'All replies are marked completed \u2014 nothing to upload.', 'warn');
+    return;
+  }
   const isNew = document.querySelector('input[name="respTarget"]:checked').value === 'new';
   let target;
   if (isNew){
@@ -1911,12 +2022,12 @@ document.getElementById('respGoBtn').addEventListener('click', async function(){
   }
   const btn = this;
   btn.disabled = true;
-  setStatus('respGoStatus', 'Claude is reading ' + respReplies.length + ' repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' and updating Monday\u2026 this can take a minute.', '');
+  setStatus('respGoStatus', 'Claude is reading ' + pendingReplies.length + ' repl' + (pendingReplies.length === 1 ? 'y' : 'ies') + ' and updating Monday\u2026 this can take a minute.', '');
   try {
     const res = await fetch('/api/respond', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target, replies: respReplies })
+      body: JSON.stringify({ target, replies: pendingReplies })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'Processing failed.');
@@ -1929,6 +2040,17 @@ document.getElementById('respGoBtn').addEventListener('click', async function(){
       (data.failed.length ? ' \u2014 ' + data.failed.length + ' failed' : '') +
       (data.boardUrl ? '. <a href="' + escapeHtml(data.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
     document.getElementById('respExcelBtn').style.display = respResults.length ? '' : 'none';
+    // Auto-mark uploaded replies completed so a re-run can't duplicate them
+    const uploadedKeys = pendingReplies.filter(r => r.addresses.length).map(r => r.key);
+    if (uploadedKeys.length && respProjectDetail){
+      pendingReplies.forEach(r => { if (r.addresses.length) r.completed = true; });
+      renderRespList();
+      fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addCompleted: uploadedKeys })
+      }).catch(function(){});
+    }
   } catch (err) {
     setStatus('respGoStatus', err.message, 'error');
   } finally {
@@ -1938,10 +2060,10 @@ document.getElementById('respGoBtn').addEventListener('click', async function(){
 
 document.getElementById('respExcelBtn').addEventListener('click', function(){
   if (!respResults.length) return;
-  const headers = ['Address', 'Square Footage', 'Notes', 'Flyer Link', 'From', 'Received'];
-  const rows = respResults.map(r => [r.address, r.squareFootage, r.notes, r.flyerLink, r.fromEmail, r.receivedAt]);
+  const headers = ['Address', 'Square Footage', 'Notes', 'Flyer Link', 'Attachments', 'From', 'Received'];
+  const rows = respResults.map(r => [r.address, r.squareFootage, r.notes, r.flyerLink, r.attachments || '', r.fromEmail, r.receivedAt]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  ws['!cols'] = [{wch:28},{wch:18},{wch:60},{wch:40},{wch:28},{wch:12}];
+  ws['!cols'] = [{wch:28},{wch:18},{wch:60},{wch:40},{wch:26},{wch:28},{wch:12}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Responses');
   XLSX.writeFile(wb, 'response-report.xlsx');
