@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/msal-browser/3.28.1/msal-browser.min.js"></script>
 <style>
   :root{
     --navy:#074A75;
@@ -405,6 +406,26 @@
   .review-table input:focus{ outline:2px solid var(--orange); outline-offset:-2px; background:#fff9f5; }
   .review-table input.flag{ background:#FFF2EA; }
   .btn-row{ display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+  select{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fff;
+  }
+  select:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  .monday-panel{
+    display:none;
+    margin-top:14px;
+    border-top:1px solid var(--line);
+    padding-top:14px;
+  }
+  .monday-panel.open{ display:block; }
+  .monday-choice{ display:flex; gap:18px; margin:0 0 12px; font-size:13.5px; flex-wrap:wrap; }
+  .monday-choice label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .monday-choice input{ accent-color:var(--orange); }
   footer{
     text-align:center;
     font-size:12px;
@@ -490,8 +511,35 @@
       <button type="button" class="primary" id="finalizeBtn" style="width:auto;">Finalize &amp; load contacts</button>
       <button type="button" class="link-btn" id="downloadXlsxBtn">Download Excel file</button>
       <button type="button" class="link-btn" id="startOverBtn">Start over</button>
+      <button type="button" class="link-btn" id="mondayOpenBtn">Sync to Monday.com</button>
     </div>
     <div class="status" id="finalizeStatus"></div>
+
+    <div class="monday-panel" id="mondayPanel">
+      <div class="option-title" style="margin-bottom:10px;">Sync these properties to Monday.com</div>
+      <div class="monday-choice">
+        <label><input type="radio" name="mondayTarget" value="new" checked> Create a new board</label>
+        <label><input type="radio" name="mondayTarget" value="existing"> Add to an existing board</label>
+      </div>
+      <div class="fields-grid" id="mondayNewFields">
+        <div class="field-item">
+          <label for="mondayWorkspace">Workspace</label>
+          <select id="mondayWorkspace"></select>
+        </div>
+        <div class="field-item">
+          <label for="mondayBoardName">New board name</label>
+          <input type="text" id="mondayBoardName" placeholder="e.g. Outreach &mdash; Dallas Retail &mdash; Jul 2026" maxlength="120">
+        </div>
+      </div>
+      <div class="fields-grid" id="mondayExistingFields" style="display:none;">
+        <div class="field-item">
+          <label for="mondayBoard">Board</label>
+          <select id="mondayBoard"></select>
+        </div>
+      </div>
+      <button type="button" class="primary" id="mondayGoBtn" style="width:auto;">Sync properties</button>
+      <div class="status" id="mondayStatus"></div>
+    </div>
   </div>
 
   <div class="card" id="templateCard">
@@ -609,6 +657,52 @@
     <button type="button" class="link-btn" id="loadProjectsBtn">Load projects</button>
     <div id="projectsList" style="margin-top:12px;"></div>
     <div class="status" id="projectsStatus"></div>
+  </div>
+
+  <div class="card" id="responseCard">
+    <h2 style="margin-bottom:4px;">Response report</h2>
+    <p class="hint">Pick a saved project, sign in with your work Microsoft account, and Claude reads the replies in your mailbox, pulls out the property details, and updates a Monday.com board &mdash; Notes, Square footage, and Flyer Link filled in, Email Status set to "*Email Received", Elimination Reason set to "Pending". Data Status and Affirmatives are left for your review.</p>
+    <div class="fields-grid">
+      <div class="field-item">
+        <label for="respProject">Project</label>
+        <select id="respProject"><option value="">Load projects first&hellip;</option></select>
+      </div>
+      <div class="field-item">
+        <label>&nbsp;</label>
+        <button type="button" class="link-btn" id="respSignInBtn" style="width:100%;">Sign in with Microsoft</button>
+      </div>
+    </div>
+    <button type="button" class="primary" id="respFetchBtn" style="width:auto; margin-top:4px;" disabled>Check for replies</button>
+    <div class="status" id="respStatus"></div>
+    <div id="respFound" style="display:none; margin-top:12px;">
+      <div class="review-summary" id="respSummary"></div>
+      <div id="respList"></div>
+      <div class="monday-choice" style="margin-top:14px;">
+        <label><input type="radio" name="respTarget" value="existing" checked> Update an existing board</label>
+        <label><input type="radio" name="respTarget" value="new"> Create a new board</label>
+      </div>
+      <div class="fields-grid" id="respExistingFields">
+        <div class="field-item">
+          <label for="respBoard">Board</label>
+          <select id="respBoard"></select>
+        </div>
+      </div>
+      <div class="fields-grid" id="respNewFields" style="display:none;">
+        <div class="field-item">
+          <label for="respWorkspace">Workspace</label>
+          <select id="respWorkspace"></select>
+        </div>
+        <div class="field-item">
+          <label for="respBoardName">New board name</label>
+          <input type="text" id="respBoardName" placeholder="e.g. Responses &mdash; Dallas Retail" maxlength="120">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="primary" id="respGoBtn" style="width:auto;">Process replies &amp; update Monday</button>
+        <button type="button" class="link-btn" id="respExcelBtn" style="display:none;">Download Excel report</button>
+      </div>
+      <div class="status" id="respGoStatus"></div>
+    </div>
   </div>
 
 </main>
@@ -999,6 +1093,82 @@ document.getElementById('startOverBtn').addEventListener('click', function(){
   checkReady();
 });
 
+// ================= Monday.com sync =================
+let mondayLoaded = false;
+
+async function loadMondayLists(){
+  const res = await fetch('/api/monday/boards');
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Failed to load boards.');
+  const ws = document.getElementById('mondayWorkspace');
+  ws.innerHTML = '<option value="">(default workspace)</option>' +
+    data.workspaces.map(w => '<option value="' + escapeHtml(w.id) + '">' + escapeHtml(w.name) + '</option>').join('');
+  const bd = document.getElementById('mondayBoard');
+  bd.innerHTML = data.boards.map(b => '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.name) + '</option>').join('') ||
+    '<option value="">(no boards found)</option>';
+  mondayLoaded = true;
+}
+
+document.getElementById('mondayOpenBtn').addEventListener('click', async function(){
+  const panel = document.getElementById('mondayPanel');
+  panel.classList.toggle('open');
+  if (!panel.classList.contains('open') || mondayLoaded) return;
+  setStatus('mondayStatus', 'Loading workspaces and boards\u2026', '');
+  try {
+    await loadMondayLists();
+    setStatus('mondayStatus', '', '');
+  } catch (err) {
+    setStatus('mondayStatus', err.message, 'error');
+  }
+});
+
+document.querySelectorAll('input[name="mondayTarget"]').forEach(r => {
+  r.addEventListener('change', function(){
+    const isNew = document.querySelector('input[name="mondayTarget"]:checked').value === 'new';
+    document.getElementById('mondayNewFields').style.display = isNew ? '' : 'none';
+    document.getElementById('mondayExistingFields').style.display = isNew ? 'none' : '';
+  });
+});
+
+document.getElementById('mondayGoBtn').addEventListener('click', async function(){
+  if (!extractedRows.length){
+    setStatus('mondayStatus', 'Nothing to sync \u2014 extract properties first.', 'error');
+    return;
+  }
+  const isNew = document.querySelector('input[name="mondayTarget"]:checked').value === 'new';
+  let target;
+  if (isNew){
+    const name = document.getElementById('mondayBoardName').value.trim();
+    if (!name){ setStatus('mondayStatus', 'Enter a name for the new board.', 'error'); return; }
+    target = { type: 'new', name, workspaceId: document.getElementById('mondayWorkspace').value || null };
+  } else {
+    const boardId = document.getElementById('mondayBoard').value;
+    if (!boardId){ setStatus('mondayStatus', 'Choose a board.', 'error'); return; }
+    target = { type: 'existing', boardId };
+  }
+  const btn = this;
+  btn.disabled = true;
+  setStatus('mondayStatus', 'Syncing ' + extractedRows.length + ' properties\u2026 this can take a moment.', '');
+  try {
+    const res = await fetch('/api/monday/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, rows: extractedRows })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Sync failed.');
+    const el = document.getElementById('mondayStatus');
+    el.className = 'status ' + (data.failed.length ? 'warn' : 'ok');
+    el.innerHTML = 'Synced ' + data.created + ' propert' + (data.created === 1 ? 'y' : 'ies') +
+      (data.failed.length ? ' \u2014 ' + data.failed.length + ' failed (first: ' + escapeHtml(data.failed[0].error) + ')' : '') +
+      (data.boardUrl ? '. <a href="' + escapeHtml(data.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
+  } catch (err) {
+    setStatus('mondayStatus', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ================= Generic templates (Market Research - Email Templates) =================
 const GENERIC_TEMPLATES = {
   "Office": {
@@ -1375,7 +1545,7 @@ document.getElementById('generateBtn').addEventListener('click', function(){
   saveProject();
 });
 
-// ================= Projects (phase 1: save at generate time) =================
+// ================= Projects (save at generate time) =================
 let currentProjectId = null;
 
 async function saveProject(){
@@ -1436,11 +1606,12 @@ document.getElementById('loadProjectsBtn').addEventListener('click', async funct
         '</div>';
       list.appendChild(row);
     });
+    const sel = document.getElementById('respProject');
+    sel.innerHTML = '<option value="">Choose a project\u2026</option>' +
+      data.projects.map(pr => '<option value="' + escapeHtml(pr.id) + '">' + escapeHtml(pr.name) + ' (' + pr.draftCount + ' drafts)</option>').join('');
     setStatus('projectsStatus', '', '');
   } catch (err) {
-    setStatus('projectsStatus', err.message.indexOf('STORAGE') !== -1 || err.message.indexOf('configured') !== -1
-      ? err.message
-      : 'Couldn\u2019t load projects \u2014 the projects API isn\u2019t deployed or configured yet.', 'error');
+    setStatus('projectsStatus', 'Couldn\u2019t load projects \u2014 the projects API isn\u2019t deployed or configured yet.', 'error');
   }
 });
 
@@ -1551,6 +1722,229 @@ document.getElementById('downloadBtn').addEventListener('click', function(){
   a.download = 'tsg-draft-emails.html';
   a.click();
   URL.revokeObjectURL(url);
+});
+
+// ================= Response report (Graph + Claude + Monday) =================
+let msalApp = null;
+let msalAccount = null;
+let respProjectDetail = null;
+let respReplies = [];
+let respResults = [];
+
+async function ensureEntra(){
+  if (msalApp) return true;
+  const res = await fetch('/api/config');
+  const data = await res.json();
+  if (!data.ok || !data.entra.clientId || !data.entra.tenantId){
+    setStatus('respStatus', 'Microsoft sign-in isn\u2019t configured yet \u2014 add ENTRA_CLIENT_ID and ENTRA_TENANT_ID in the Static Web App settings (see README).', 'error');
+    return false;
+  }
+  msalApp = new msal.PublicClientApplication({
+    auth: {
+      clientId: data.entra.clientId,
+      authority: 'https://login.microsoftonline.com/' + data.entra.tenantId,
+      redirectUri: window.location.origin
+    },
+    cache: { cacheLocation: 'sessionStorage' }
+  });
+  await msalApp.initialize();
+  return true;
+}
+
+document.getElementById('respSignInBtn').addEventListener('click', async function(){
+  try {
+    if (!(await ensureEntra())) return;
+    const result = await msalApp.loginPopup({ scopes: ['Mail.Read'] });
+    msalAccount = result.account;
+    this.textContent = 'Signed in: ' + (msalAccount.username || 'account');
+    setStatus('respStatus', '', '');
+    updateRespReady();
+  } catch (err) {
+    setStatus('respStatus', 'Sign-in failed: ' + err.message, 'error');
+  }
+});
+
+document.getElementById('respProject').addEventListener('change', updateRespReady);
+
+function updateRespReady(){
+  document.getElementById('respFetchBtn').disabled = !(msalAccount && document.getElementById('respProject').value);
+}
+
+async function graphToken(){
+  const req = { scopes: ['Mail.Read'], account: msalAccount };
+  try {
+    return (await msalApp.acquireTokenSilent(req)).accessToken;
+  } catch (err) {
+    return (await msalApp.acquireTokenPopup(req)).accessToken;
+  }
+}
+
+function normalizeSubject(s){
+  return (s || '').replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '').trim().toLowerCase();
+}
+
+function addressesFromSubject(subject){
+  // "a, b, c" (addresses mode) or "Label - a | b | c" (label mode); custom subjects yield none
+  let s = subject || '';
+  const dash = s.indexOf(' - ');
+  if (s.indexOf(' | ') !== -1 && dash !== -1) s = s.slice(dash + 3);
+  if (s.indexOf(' | ') !== -1) return s.split(' | ').map(x => x.trim()).filter(Boolean);
+  if (s.indexOf(', ') !== -1) return s.split(', ').map(x => x.trim()).filter(Boolean);
+  return s.trim() ? [s.trim()] : [];
+}
+
+document.getElementById('respFetchBtn').addEventListener('click', async function(){
+  const projectId = document.getElementById('respProject').value;
+  if (!projectId || !msalAccount) return;
+  const btn = this;
+  btn.disabled = true;
+  setStatus('respStatus', 'Loading project and searching your mailbox\u2026', '');
+  try {
+    const pres = await fetch('/api/projects/' + encodeURIComponent(projectId));
+    const pdata = await pres.json();
+    if (!pdata.ok) throw new Error(pdata.error || 'Failed to load the project.');
+    respProjectDetail = pdata.project;
+    const senderSet = new Set(respProjectDetail.drafts.map(d => d.email.toLowerCase()));
+    const subjectMap = {};
+    respProjectDetail.drafts.forEach(d => { subjectMap[normalizeSubject(d.subject)] = d; });
+
+    const token = await graphToken();
+    const since = (respProjectDetail.createdAt || '').slice(0, 19) + 'Z';
+    let url = 'https://graph.microsoft.com/v1.0/me/messages?$select=from,subject,receivedDateTime,body' +
+      '&$orderby=receivedDateTime desc&$top=50&$filter=receivedDateTime ge ' + encodeURIComponent(since);
+    const messages = [];
+    for (let page = 0; page < 8 && url; page++){
+      const gres = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token, 'Prefer': 'outlook.body-content-type="text"' } });
+      const gdata = await gres.json();
+      if (gdata.error) throw new Error('Microsoft Graph: ' + gdata.error.message);
+      (gdata.value || []).forEach(m => messages.push(m));
+      url = gdata['@odata.nextLink'] || null;
+    }
+
+    respReplies = [];
+    messages.forEach(m => {
+      const from = m.from && m.from.emailAddress ? m.from.emailAddress : {};
+      const sender = (from.address || '').toLowerCase();
+      if (!senderSet.has(sender)) return;
+      const norm = normalizeSubject(m.subject);
+      let draft = subjectMap[norm] || null;
+      if (!draft){
+        // fall back: any draft from this sender whose subject the reply subject contains
+        draft = respProjectDetail.drafts.find(d => d.email.toLowerCase() === sender && norm.indexOf(normalizeSubject(d.subject)) !== -1) || null;
+      }
+      respReplies.push({
+        fromEmail: sender,
+        fromName: from.name || '',
+        receivedAt: m.receivedDateTime || '',
+        subject: m.subject || '',
+        bodyText: (m.body && m.body.content) || '',
+        addresses: draft ? addressesFromSubject(draft.subject) : []
+      });
+    });
+    // keep only the latest reply per sender+subject
+    const seen = new Set();
+    respReplies = respReplies.filter(r => {
+      const k = r.fromEmail + '|' + normalizeSubject(r.subject);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).slice(0, 50);
+
+    if (!respReplies.length){
+      setStatus('respStatus', 'No replies found from this project\u2019s contacts since it was sent.', 'warn');
+      document.getElementById('respFound').style.display = 'none';
+      return;
+    }
+    const matched = respReplies.filter(r => r.addresses.length).length;
+    document.getElementById('respSummary').innerHTML =
+      '<b>' + respReplies.length + '</b> repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' found \u2014 <b>' +
+      matched + '</b> matched to properties' + (respReplies.length - matched ? ', ' + (respReplies.length - matched) + ' unmatched (custom subject)' : '') + '.';
+    const list = document.getElementById('respList');
+    list.innerHTML = '';
+    respReplies.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'result-row';
+      row.innerHTML = '<div class="result-meta">' +
+        '<div class="name">' + escapeHtml(r.fromName || r.fromEmail) + '</div>' +
+        '<div class="email">' + escapeHtml(r.fromEmail) + ' \u2014 ' + escapeHtml((r.receivedAt || '').slice(0, 10)) + '</div>' +
+        '<div class="subj">' + escapeHtml(r.addresses.join(' | ') || '(no address matched)') + '</div>' +
+        '<details><summary>Preview reply</summary><pre>' + escapeHtml(r.bodyText.slice(0, 1200)) + '</pre></details>' +
+        '</div>';
+      list.appendChild(row);
+    });
+    document.getElementById('respFound').style.display = 'block';
+    setStatus('respStatus', '', '');
+    if (!mondayLoaded) await loadMondayLists();
+    syncRespBoardLists();
+  } catch (err) {
+    setStatus('respStatus', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function syncRespBoardLists(){
+  document.getElementById('respBoard').innerHTML = document.getElementById('mondayBoard').innerHTML;
+  document.getElementById('respWorkspace').innerHTML = document.getElementById('mondayWorkspace').innerHTML;
+}
+
+document.querySelectorAll('input[name="respTarget"]').forEach(r => {
+  r.addEventListener('change', function(){
+    const isNew = document.querySelector('input[name="respTarget"]:checked').value === 'new';
+    document.getElementById('respNewFields').style.display = isNew ? '' : 'none';
+    document.getElementById('respExistingFields').style.display = isNew ? 'none' : '';
+  });
+});
+
+document.getElementById('respGoBtn').addEventListener('click', async function(){
+  if (!respReplies.length) return;
+  const isNew = document.querySelector('input[name="respTarget"]:checked').value === 'new';
+  let target;
+  if (isNew){
+    const name = document.getElementById('respBoardName').value.trim();
+    if (!name){ setStatus('respGoStatus', 'Enter a name for the new board.', 'error'); return; }
+    target = { type: 'new', name, workspaceId: document.getElementById('respWorkspace').value || null };
+  } else {
+    const boardId = document.getElementById('respBoard').value;
+    if (!boardId){ setStatus('respGoStatus', 'Choose a board.', 'error'); return; }
+    target = { type: 'existing', boardId };
+  }
+  const btn = this;
+  btn.disabled = true;
+  setStatus('respGoStatus', 'Claude is reading ' + respReplies.length + ' repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' and updating Monday\u2026 this can take a minute.', '');
+  try {
+    const res = await fetch('/api/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, replies: respReplies })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Processing failed.');
+    respResults = data.results || [];
+    const el = document.getElementById('respGoStatus');
+    el.className = 'status ' + (data.failed.length ? 'warn' : 'ok');
+    el.innerHTML = 'Updated ' + data.updated + ' item' + (data.updated === 1 ? '' : 's') +
+      (data.createdItems ? ', created ' + data.createdItems : '') +
+      (data.unmatched.length ? ' \u2014 ' + data.unmatched.length + ' unmatched for manual review' : '') +
+      (data.failed.length ? ' \u2014 ' + data.failed.length + ' failed' : '') +
+      (data.boardUrl ? '. <a href="' + escapeHtml(data.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
+    document.getElementById('respExcelBtn').style.display = respResults.length ? '' : 'none';
+  } catch (err) {
+    setStatus('respGoStatus', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('respExcelBtn').addEventListener('click', function(){
+  if (!respResults.length) return;
+  const headers = ['Address', 'Square Footage', 'Notes', 'Flyer Link', 'From', 'Received'];
+  const rows = respResults.map(r => [r.address, r.squareFootage, r.notes, r.flyerLink, r.fromEmail, r.receivedAt]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:28},{wch:18},{wch:60},{wch:40},{wch:28},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Responses');
+  XLSX.writeFile(wb, 'response-report.xlsx');
 });
 
 // ================= Restore a previously finalized list =================
