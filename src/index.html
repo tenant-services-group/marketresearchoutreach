@@ -426,6 +426,102 @@
   .monday-choice{ display:flex; gap:18px; margin:0 0 12px; font-size:13.5px; flex-wrap:wrap; }
   .monday-choice label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
   .monday-choice input{ accent-color:var(--orange); }
+  /* ---- views (home / generate / follow-up) ---- */
+  .view{ display:none; }
+  .view.active{ display:block; }
+  .crumb{
+    display:inline-block;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--orange-dark);
+    text-decoration:none;
+    margin-bottom:6px;
+  }
+  .crumb:hover{ text-decoration:underline; }
+  .home-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:20px;
+  }
+  @media (min-width:700px){
+    .home-grid{ grid-template-columns:1fr 1fr; }
+  }
+  .home-card{
+    display:flex;
+    flex-direction:column;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:26px 24px 22px;
+    text-decoration:none;
+    color:inherit;
+    transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  }
+  .home-card:hover{
+    border-color:var(--orange);
+    box-shadow:0 6px 18px rgba(7,74,117,0.10);
+    transform:translateY(-2px);
+  }
+  .home-icon{
+    width:56px;
+    height:56px;
+    border-radius:12px;
+    background:var(--navy);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-bottom:16px;
+    flex-shrink:0;
+  }
+  .home-card:hover .home-icon{ background:var(--orange); }
+  .home-icon svg{ width:28px; height:28px; display:block; }
+  .home-card h3{
+    font-family:'Playfair Display','Libre Franklin',Georgia,serif;
+    font-size:20px;
+    margin:0 0 6px;
+    color:var(--navy);
+  }
+  .home-card p{
+    margin:0 0 14px;
+    font-size:13.5px;
+    color:#6b7280;
+  }
+  .home-card ul{
+    margin:0 0 18px;
+    padding-left:18px;
+    font-size:13px;
+    color:#6b7280;
+  }
+  .home-card ul li{ margin-bottom:3px; }
+  .home-open{
+    margin-top:auto;
+    font-size:13px;
+    font-weight:700;
+    color:var(--orange-dark);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  /* ---- saved projects search / paging ---- */
+  .proj-toolbar{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:10px;
+  }
+  .proj-toolbar .search-wrap{ flex:1; min-width:220px; }
+  input[type=search]{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fff;
+  }
+  input[type=search]:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
+  .proj-count{ font-size:12.5px; color:#6b7280; margin:0 0 10px; }
+  .proj-more{ margin-top:2px; }
   footer{
     text-align:center;
     font-size:12px;
@@ -443,16 +539,61 @@
 
 <div class="page-title">
   <div>
-    <h1>Market Research Outreach</h1>
-    <p>Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.</p>
+    <a class="crumb" id="homeCrumb" href="#/" style="display:none;">&larr; All tools</a>
+    <h1 id="pageH1">Market Research Outreach</h1>
+    <p id="pageSub">Two tools: build and send the outreach, then follow up on the replies.</p>
   </div>
   <span style="display:flex; gap:8px; align-items:center;">
-    <button type="button" class="link-btn" id="signInBtn" title="Sign in to save projects under your name and read replies">Sign in</button>
-    <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh">Reset all</button>
+    <button type="button" class="link-btn" id="signInBtn" title="Sign in to save projects under your name and read replies" style="display:none;">Sign in</button>
+    <button type="button" class="link-btn" id="resetPageBtn" title="Clear everything and start fresh" style="display:none;">Reset all</button>
   </span>
 </div>
 
 <main>
+
+<div class="view" id="viewHome">
+  <div class="home-grid">
+
+    <a class="home-card" href="#/generate">
+      <span class="home-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h11A1.5 1.5 0 0 1 17 6.5v9A1.5 1.5 0 0 1 15.5 17h-11A1.5 1.5 0 0 1 3 15.5z"></path>
+          <path d="M3.4 6.1 10 11.2l6.6-5.1"></path>
+          <path d="M19.5 3.5v4M21.5 5.5h-4"></path>
+        </svg>
+      </span>
+      <h3>Generate Emails</h3>
+      <p>Turn a property report into ready-to-send outreach drafts.</p>
+      <ul>
+        <li>Extract contacts from a PDF or Excel file</li>
+        <li>Review and fix the list, sync it to Monday.com</li>
+        <li>Pick a template and subject, generate one draft per contact</li>
+      </ul>
+      <span class="home-open">Open &rarr;</span>
+    </a>
+
+    <a class="home-card" href="#/followup">
+      <span class="home-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 4.5h11a2 2 0 0 1 2 2v13l-3.5-2.4L10 19.5 6.5 17.1 3 19.5v-13a2 2 0 0 1 1-1.7z"></path>
+          <path d="M7 9h7M7 12.5h4.5"></path>
+          <path d="m16.5 12.5 2.2 2.2 4-4.3"></path>
+        </svg>
+      </span>
+      <h3>Project Follow-up</h3>
+      <p>Pick up a saved send and work the replies that came back.</p>
+      <ul>
+        <li>Search every project you've saved</li>
+        <li>Pull broker replies straight from your mailbox</li>
+        <li>Process replies and update Monday.com</li>
+      </ul>
+      <span class="home-open">Open &rarr;</span>
+    </a>
+
+  </div>
+</div>
+
+<div class="view" id="viewGenerate">
 
   <div class="card" id="contactCard">
     <h2><span class="step-num">1</span> Get your contact list</h2>
@@ -658,12 +799,25 @@
     <div id="resultList"></div>
   </div>
 
+</div>
+
+<div class="view" id="viewFollowup">
+
   <div class="card" id="projectsCard">
     <h2 style="margin-bottom:4px;">Saved projects</h2>
-    <p class="hint">Sends saved with a project name. Response reports will build on these. Regenerating drafts updates the project you just saved instead of adding a second one &mdash; and Delete removes a project you no longer need.</p>
-    <button type="button" class="link-btn" id="loadProjectsBtn">Load projects</button>
-    <label style="font-size:13px; margin-left:10px; cursor:pointer;"><input type="checkbox" id="showAllProjects" style="accent-color:var(--orange);"> Show everyone's projects</label>
-    <div id="projectsList" style="margin-top:12px;"></div>
+    <p class="hint">Sends saved with a project name. The response report below builds on these. Regenerating drafts updates the project you just saved instead of adding a second one &mdash; and Delete removes a project you no longer need.</p>
+    <div class="proj-toolbar">
+      <span class="search-wrap">
+        <input type="search" id="projectSearch" placeholder="Search projects by name, date, or owner&hellip;" autocomplete="off">
+      </span>
+      <button type="button" class="link-btn" id="loadProjectsBtn">Refresh</button>
+      <label style="font-size:13px; cursor:pointer; white-space:nowrap;"><input type="checkbox" id="showAllProjects" style="accent-color:var(--orange);"> Show everyone's projects</label>
+    </div>
+    <p class="proj-count" id="projectsCount" style="display:none;"></p>
+    <div id="projectsList"></div>
+    <div class="proj-more">
+      <button type="button" class="link-btn" id="viewAllProjectsBtn" style="display:none;"></button>
+    </div>
     <div class="status" id="projectsStatus"></div>
   </div>
 
@@ -716,6 +870,8 @@
       <div class="status" id="respGoStatus"></div>
     </div>
   </div>
+
+</div>
 
 </main>
 
@@ -1640,34 +1796,57 @@ function reportOpened(email){
   }).catch(function(){ /* fire-and-forget */ });
 }
 
-async function loadProjects(){
-  setStatus('projectsStatus', 'Loading\u2026', '');
+// Saved projects: the API returns the whole list newest-first, but hundreds of
+// rows are unusable \u2014 so the card shows the 5 most recent, with a search box and
+// a "View all" toggle over the full list held in allProjects.
+const PROJECT_PREVIEW = 5;
+let allProjects = [];
+let projectsExpanded = false;
+let projectsLoaded = false;
+
+function projectSearchText(pr){
+  const when = pr.createdAt ? new Date(pr.createdAt).toLocaleString() : '';
+  return ((pr.name || '') + ' ' + (pr.owner || '') + ' ' + when).toLowerCase();
+}
+
+function renderProjects(){
   const list = document.getElementById('projectsList');
+  const countEl = document.getElementById('projectsCount');
+  const moreBtn = document.getElementById('viewAllProjectsBtn');
+  const q = document.getElementById('projectSearch').value.trim().toLowerCase();
+  const matches = q ? allProjects.filter(pr => projectSearchText(pr).indexOf(q) !== -1) : allProjects;
+  const shown = projectsExpanded ? matches : matches.slice(0, PROJECT_PREVIEW);
+
   list.innerHTML = '';
-  try {
-    const showAll = document.getElementById('showAllProjects').checked;
-    const me = currentUser();
-    const qs = (!showAll && me) ? ('?owner=' + encodeURIComponent(me)) : '';
-    const res = await fetch('/api/projects' + qs);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Failed to load projects.');
-    if (!data.projects.length){
-      setStatus('projectsStatus', (qs ? 'No projects saved under your account yet \u2014 check "Show everyone\u2019s projects" for the full list, or ' : 'No saved projects yet \u2014 ') + 'add a project name in step 5 before generating.', '');
-      return;
-    }
-    data.projects.forEach(pr => {
-      const row = document.createElement('div');
-      row.className = 'result-row';
-      const when = pr.createdAt ? new Date(pr.createdAt).toLocaleString() : '';
-      row.innerHTML = '<div class="result-meta">' +
-        '<div class="name">' + escapeHtml(pr.name) + '</div>' +
-        '<div class="email">' + escapeHtml(when) + (pr.owner ? ' \u2014 ' + escapeHtml(pr.owner) : '') + '</div>' +
-        '<div class="subj">' + pr.draftCount + ' draft' + (pr.draftCount === 1 ? '' : 's') + ' \u2014 ' + pr.openedCount + ' opened</div>' +
-        '</div>' +
-        '<div class="result-actions"><button type="button" class="copy-btn proj-del" data-id="' + escapeHtml(pr.id) + '">Delete</button></div>';
-      list.appendChild(row);
-    });
-    list.querySelectorAll('.proj-del').forEach(btn => {
+  countEl.style.display = allProjects.length ? '' : 'none';
+  if (allProjects.length){
+    countEl.textContent = !matches.length
+      ? 'No projects match "' + q + '".'
+      : 'Showing ' + shown.length + ' of ' + matches.length +
+        (q ? ' matching project' + (matches.length === 1 ? '' : 's') : ' saved project' + (matches.length === 1 ? '' : 's')) +
+        (!q && matches.length > shown.length ? ' \u2014 most recent first' : '') + '.';
+  }
+  if (matches.length > PROJECT_PREVIEW){
+    moreBtn.style.display = '';
+    moreBtn.textContent = projectsExpanded ? 'Show only the 5 most recent' : 'View all ' + matches.length;
+  } else {
+    moreBtn.style.display = 'none';
+  }
+
+  shown.forEach(pr => {
+    const row = document.createElement('div');
+    row.className = 'result-row';
+    const when = pr.createdAt ? new Date(pr.createdAt).toLocaleString() : '';
+    row.innerHTML = '<div class="result-meta">' +
+      '<div class="name">' + escapeHtml(pr.name) + '</div>' +
+      '<div class="email">' + escapeHtml(when) + (pr.owner ? ' \u2014 ' + escapeHtml(pr.owner) : '') + '</div>' +
+      '<div class="subj">' + pr.draftCount + ' draft' + (pr.draftCount === 1 ? '' : 's') + ' \u2014 ' + pr.openedCount + ' opened</div>' +
+      '</div>' +
+      '<div class="result-actions"><button type="button" class="copy-btn proj-del" data-id="' + escapeHtml(pr.id) + '">Delete</button></div>';
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll('.proj-del').forEach(btn => {
       btn.addEventListener('click', async function(){
         if (this.dataset.confirm !== '1'){
           this.dataset.confirm = '1';
@@ -1702,10 +1881,32 @@ async function loadProjects(){
           this.dataset.confirm = '';
         }
       });
-    });
+  });
+}
+
+async function loadProjects(){
+  setStatus('projectsStatus', 'Loading\u2026', '');
+  try {
+    const showAll = document.getElementById('showAllProjects').checked;
+    const me = currentUser();
+    const qs = (!showAll && me) ? ('?owner=' + encodeURIComponent(me)) : '';
+    const res = await fetch('/api/projects' + qs);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed to load projects.');
+    projectsLoaded = true;
+    allProjects = data.projects;
+    // The project picker below always offers every project, search or not.
     const sel = document.getElementById('respProject');
+    const keep = sel.value;
     sel.innerHTML = '<option value="">Choose a project\u2026</option>' +
-      data.projects.map(pr => '<option value="' + escapeHtml(pr.id) + '">' + escapeHtml(pr.name) + ' (' + pr.draftCount + ' drafts)</option>').join('');
+      allProjects.map(pr => '<option value="' + escapeHtml(pr.id) + '">' + escapeHtml(pr.name) + ' (' + pr.draftCount + ' drafts)</option>').join('');
+    if (keep && allProjects.some(pr => pr.id === keep)) sel.value = keep;
+    updateRespReady();
+    renderProjects();
+    if (!allProjects.length){
+      setStatus('projectsStatus', (qs ? 'No projects saved under your account yet \u2014 check "Show everyone\u2019s projects" for the full list, or ' : 'No saved projects yet \u2014 ') + 'add a project name in step 5 of Generate Emails before generating.', '');
+      return;
+    }
     setStatus('projectsStatus', '', '');
   } catch (err) {
     setStatus('projectsStatus', 'Couldn\u2019t load projects \u2014 the projects API isn\u2019t deployed or configured yet.', 'error');
@@ -1713,6 +1914,14 @@ async function loadProjects(){
 }
 document.getElementById('loadProjectsBtn').addEventListener('click', loadProjects);
 document.getElementById('showAllProjects').addEventListener('change', loadProjects);
+document.getElementById('projectSearch').addEventListener('input', function(){
+  projectsExpanded = false;   // a new search starts from the 5 best matches
+  renderProjects();
+});
+document.getElementById('viewAllProjectsBtn').addEventListener('click', function(){
+  projectsExpanded = !projectsExpanded;
+  renderProjects();
+});
 
 let sentSet = new Set();
 
@@ -1860,6 +2069,8 @@ document.getElementById('signInBtn').addEventListener('click', async function(){
     document.getElementById('respSignInHint').textContent = 'Signed in as ' + (msalAccount.username || '') + '.';
     setStatus('respStatus', '', '');
     updateRespReady();
+    // Signing in narrows "Saved projects" to this user, so reload what's shown.
+    if (projectsLoaded) loadProjects();
   } catch (err) {
     setStatus('respStatus', 'Sign-in failed: ' + err.message, 'error');
   }
@@ -2129,6 +2340,50 @@ document.getElementById('respExcelBtn').addEventListener('click', function(){
     setStatus('finalizeStatus', 'Loaded ' + contacts.length + ' contacts finalized ' + when.toLocaleString() + '. Edit and re-finalize, or use "Start over" to clear.', 'ok');
   }
 })();
+
+// ================= Pages (home / generate / follow-up) =================
+// Everything lives in this one file, so the two tools are separate hash routes
+// over the same document: #/generate and #/followup, with the card menu at #/.
+const PAGES = {
+  home: {
+    view: 'viewHome',
+    title: 'Market Research Outreach',
+    sub: 'Two tools: build and send the outreach, then follow up on the replies.',
+    doc: 'TSG Market Research Outreach'
+  },
+  generate: {
+    view: 'viewGenerate',
+    title: 'Generate Emails',
+    sub: 'Extract contacts from a property PDF, review and finalize the list, then generate one draft email per contact.',
+    doc: 'Generate Emails — TSG Market Research Outreach'
+  },
+  followup: {
+    view: 'viewFollowup',
+    title: 'Project Follow-up',
+    sub: 'Open a saved project, pull the replies from your mailbox, and push the details to Monday.com.',
+    doc: 'Project Follow-up — TSG Market Research Outreach'
+  }
+};
+
+function showPage(){
+  const key = (location.hash || '').replace(/^#\/?/, '').split('?')[0];
+  const name = PAGES[key] ? key : 'home';
+  const page = PAGES[name];
+  Object.keys(PAGES).forEach(k => {
+    document.getElementById(PAGES[k].view).classList.toggle('active', k === name);
+  });
+  document.getElementById('pageH1').textContent = page.title;
+  document.getElementById('pageSub').textContent = page.sub;
+  document.title = page.doc;
+  document.getElementById('homeCrumb').style.display = name === 'home' ? 'none' : '';
+  document.getElementById('signInBtn').style.display = name === 'home' ? 'none' : '';
+  document.getElementById('resetPageBtn').style.display = name === 'generate' ? '' : 'none';
+  // Saved projects load themselves the first time the follow-up page is opened.
+  if (name === 'followup' && !projectsLoaded) loadProjects();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', showPage);
+showPage();
 </script>
 
 </body>

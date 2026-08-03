@@ -1,15 +1,27 @@
 # TSG Market Research Outreach
 
-Single-page tool covering the full Market Research outreach process: extract contacts from a property PDF, review and finalize the list, then generate one Outlook draft per contact.
+Tool covering the full Market Research outreach process: extract contacts from a property PDF, review and finalize the list, generate one Outlook draft per contact — then come back later to work the replies.
 
-## Workflow
+## Pages
+
+Everything is served from the one `src/index.html` file; the pages are hash routes over it, so links can be bookmarked and shared.
+
+| Route | Page | Contains |
+|---|---|---|
+| `/` | **Home** | Card menu for the two tools |
+| `/#/generate` | **Generate Emails** | Steps 1–5 (contact list → review → template → subject → generate) and the draft list |
+| `/#/followup` | **Project Follow-up** | Saved projects and the response report (check replies, process them, update Monday.com) |
+
+"Sign in" appears on both tool pages; "Reset all" only on Generate Emails, where the saved contact list lives.
+
+## Workflow (Generate Emails)
 
 1. **Get your contact list** — two sources:
    - **Extract from a PDF report** (default) — upload a CoStar-style property PDF and the expected property count. The parser pulls Property Address, Property Name, Leasing Company, First Name, Last Name, Contact Email, City, State, and Zip — one contact per property, taken **only from the Primary Leasing Company section**. If that section is blank or absent, the contact fields stay blank and the review table flags them for manual entry (no fallback to Property Manager or True Owner).
    - **Upload an Excel file (.xlsx)** — for lists you already have. Needs email, first name, and property address columns (city optional); column names are matched loosely.
 2. **Review & finalize contacts** (PDF path) — editable table of everything extracted. Missing first names and emails are highlighted; type corrections directly into any cell. "Finalize & load contacts" feeds the list straight into the generator — no file download or re-upload. Rows without an email are left out (with a count). "Download Excel file" exports the table *as edited*; "Start over" clears everything.
 3. **Choose an email template** — generic industry templates (Office, Office-Medical, Retail, Retail-Medical, Retail-Restaurant, Industrial) with fill-in fields, an uploaded .docx, or pasted text. `NAME` and `ADDRESS` placeholders are replaced per contact (legacy `ADDRESS(ES)` also accepted).
-4. **Choose a subject line** — property addresses, addresses filtered by city, or one custom subject.
+4. **Choose a subject line** — the contact's property addresses, the same addresses behind a label you type (e.g. `Dallas - 123 Elm St. | 456 Lake Rd.` — a prefix, not a filter), or one custom subject used on every draft.
 5. **Generate** — one draft per unique email address. "Open draft" launches the default mail client (Outlook) via `mailto:`; "Copy body" is the fallback for clients that truncate long `mailto:` bodies.
 
 A finalized list is saved in the browser's local storage, so refreshing or returning to the page restores it automatically (with the finalize timestamp shown). "Start over" clears the saved list.
@@ -20,7 +32,9 @@ Everything runs in the browser. PDFs, contact lists, and templates are never upl
 
 ## Projects (saved sends)
 
-Adding a **project name** in step 5 before generating saves the send — contact emails, subject lines, and date — to Azure Table Storage via the managed Functions API. Clicking "Open draft" marks that contact as opened. The "Saved projects" card lists everything saved, with a **Delete** button on each row (click once to arm, again to confirm). Response reports will build on these records.
+Adding a **project name** in step 5 before generating saves the send — contact emails, subject lines, and date — to Azure Table Storage via the managed Functions API. Clicking "Open draft" marks that contact as opened.
+
+The **Saved projects** card on the Project Follow-up page loads itself the first time that page is opened, and shows the **5 most recent** projects with a **View all** toggle for the rest. The search box filters the full list by project name, owner, or saved date; results stay capped at 5 until "View all" is clicked. Each row has a **Delete** button (click once to arm, again to confirm). The Response report's project picker always lists every project, searched or not.
 
 Regenerating drafts does **not** create a second project: as long as the project name is unchanged, a re-generate updates the project saved a moment ago (drafts, subjects, and count are replaced; contacts that already opened a draft keep that status). Changing the project name — or reloading the page first — starts a new project, and anything left over can be removed with Delete.
 
@@ -61,7 +75,7 @@ README.md
 3. **Monday token** (for sync): Monday.com → click your avatar → Developers → My access tokens → copy. Add as `MONDAY_API_TOKEN` in the same Environment variables screen → Apply.
 4. Optional: `DEBUG_RESPONSE` = `true` while testing (adds error detail to API responses); set back to `false` for users.
 
-The `OutreachProjects` table auto-creates on first save. Round-trip test: generate with a project name → "Project saved" → open one draft → Load projects shows it with opened = 1. Monday test: extract a small PDF → Sync to Monday.com → new board → link appears → board shows the properties.
+The `OutreachProjects` table auto-creates on first save. Round-trip test: generate with a project name → "Project saved" → open one draft → Project Follow-up lists it with opened = 1. Monday test: extract a small PDF → Sync to Monday.com → new board → link appears → board shows the properties.
 
 ## External resources (reflected in the CSP)
 
