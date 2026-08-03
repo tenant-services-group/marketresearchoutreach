@@ -6,8 +6,13 @@
  *   GET    /api/projects/{id}   → one project including its drafts
  *   POST   /api/projects        → save a project at generate time
  *                                 body: { name, subjects:[..], drafts:[{email,name,subject}] }
+ *   PUT    /api/projects/{id}   → replace an existing project's name/subjects/drafts
+ *                                 (used when drafts are regenerated, so a re-generate
+ *                                 updates the same project instead of duplicating it).
+ *                                 Opened flags are carried forward by email address.
  *   PATCH  /api/projects/{id}   → mark drafts opened
  *                                 body: { openedEmails:["a@b.com", ...] }
+ *   DELETE /api/projects/{id}   → delete a project
  *
  * Debug: set DEBUG_RESPONSE=true on the SWA to include error detail in responses.
  */
@@ -38,7 +43,7 @@ const debugInfo = (err) =>
   process.env.DEBUG_RESPONSE === 'true' ? String(err && err.message).slice(0, 600) : undefined;
 
 app.http('projects', {
-  methods: ['GET', 'POST', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   authLevel: 'anonymous',
   route: 'projects/{id?}',
   handler: async (request, context) => {
@@ -49,7 +54,9 @@ app.http('projects', {
       if (request.method === 'GET' && !id) return await listProjects();
       if (request.method === 'GET') return await getProject(id);
       if (request.method === 'POST') return await createProject(request);
+      if (request.method === 'PUT') return await replaceProject(request, id);
       if (request.method === 'PATCH') return await markOpened(request, id);
+      if (request.method === 'DELETE') return await deleteProject(id);
       return json(405, { ok: false, error: 'Method not allowed.' });
     } catch (err) {
       context.error('projects API error:', err.message);
@@ -103,12 +110,14 @@ async function getProject(id) {
   }
 }
 
-async function createProject(request) {
+// Shared body parsing for POST (create) and PUT (replace).
+// Returns { error } on a validation failure, otherwise { name, drafts, subjects }.
+async function readProjectBody(request) {
   let body = {};
   try { body = await request.json(); } catch (err) {}
 
   const name = clean(body.name, LIMITS.name);
-  if (!name) return json(400, { ok: false, error: 'Project name is required.' });
+  if (!name) return { error: 'Project name is required.' };
 
   const rawDrafts = Array.isArray(body.drafts) ? body.drafts.slice(0, LIMITS.maxDrafts) : [];
   const drafts = rawDrafts
@@ -120,23 +129,84 @@ async function createProject(request) {
       openedAt: '',
     }))
     .filter(d => d.email);
-  if (!drafts.length) return json(400, { ok: false, error: 'No drafts with an email address were provided.' });
+  if (!drafts.length) return { error: 'No drafts with an email address were provided.' };
 
   const subjects = (Array.isArray(body.subjects) ? body.subjects : [])
     .slice(0, LIMITS.maxSubjects)
     .map(s => clean(s, LIMITS.subject))
     .filter(Boolean);
 
+  return { name, drafts, subjects };
+}
+
+async function createProject(request) {
+  const parsed = await readProjectBody(request);
+  if (parsed.error) return json(400, { ok: false, error: parsed.error });
+
   const id = newId();
   await getClient().createEntity({
     partitionKey: PARTITION,
     rowKey: id,
-    name,
+    name: parsed.name,
     createdAt: new Date().toISOString(),
-    draftCount: drafts.length,
-    draftsJson: JSON.stringify(drafts),
-    subjectsJson: JSON.stringify(subjects),
+    draftCount: parsed.drafts.length,
+    draftsJson: JSON.stringify(parsed.drafts),
+    subjectsJson: JSON.stringify(parsed.subjects),
   });
+  return json(200, { ok: true, id });
+}
+
+// Regenerating drafts updates the project in place instead of writing a second
+// row for the same send. Contacts that already opened a draft keep that status
+// as long as they are still on the regenerated list. createdAt is untouched.
+async function replaceProject(request, id) {
+  if (!id) return json(400, { ok: false, error: 'Project id is required.' });
+
+  const parsed = await readProjectBody(request);
+  if (parsed.error) return json(400, { ok: false, error: parsed.error });
+
+  const client = getClient();
+  let entity;
+  try {
+    entity = await client.getEntity(PARTITION, id);
+  } catch (err) {
+    if (err.statusCode === 404) return json(404, { ok: false, error: 'Project not found.' });
+    throw err;
+  }
+
+  let previous = [];
+  try { previous = JSON.parse(entity.draftsJson || '[]'); } catch (err) {}
+  const openedBefore = new Map();
+  previous.forEach(d => { if (d && d.opened) openedBefore.set(d.email, d.openedAt || ''); });
+
+  const drafts = parsed.drafts.map(d =>
+    openedBefore.has(d.email)
+      ? Object.assign({}, d, { opened: true, openedAt: openedBefore.get(d.email) })
+      : d
+  );
+
+  await client.updateEntity(
+    {
+      partitionKey: PARTITION,
+      rowKey: id,
+      name: parsed.name,
+      draftCount: drafts.length,
+      draftsJson: JSON.stringify(drafts),
+      subjectsJson: JSON.stringify(parsed.subjects),
+    },
+    'Merge'
+  );
+  return json(200, { ok: true, id });
+}
+
+async function deleteProject(id) {
+  if (!id) return json(400, { ok: false, error: 'Project id is required.' });
+  try {
+    await getClient().deleteEntity(PARTITION, id);
+  } catch (err) {
+    if (err.statusCode === 404) return json(404, { ok: false, error: 'Project not found.' });
+    throw err;
+  }
   return json(200, { ok: true, id });
 }
 

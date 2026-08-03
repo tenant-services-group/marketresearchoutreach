@@ -20,7 +20,11 @@ Everything runs in the browser. PDFs, contact lists, and templates are never upl
 
 ## Projects (saved sends)
 
-Adding a **project name** in step 5 before generating saves the send — contact emails, subject lines, and date — to Azure Table Storage via the managed Functions API. Clicking "Open draft" marks that contact as opened. The "Saved projects" card lists everything saved. Response reports will build on these records.
+Adding a **project name** in step 5 before generating saves the send — contact emails, subject lines, and date — to Azure Table Storage via the managed Functions API. Clicking "Open draft" marks that contact as opened. The "Saved projects" card lists everything saved, with a **Delete** button on each row (click once to arm, again to confirm). Response reports will build on these records.
+
+Regenerating drafts does **not** create a second project: as long as the project name is unchanged, a re-generate updates the project saved a moment ago (drafts, subjects, and count are replaced; contacts that already opened a draft keep that status). Changing the project name — or reloading the page first — starts a new project, and anything left over can be removed with Delete.
+
+API routes: `GET /api/projects`, `GET /api/projects/{id}`, `POST /api/projects`, `PUT /api/projects/{id}` (replace on regenerate), `PATCH /api/projects/{id}` (mark opened), `DELETE /api/projects/{id}`.
 
 ## Monday.com sync
 

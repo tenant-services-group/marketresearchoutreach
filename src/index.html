@@ -660,7 +660,7 @@
 
   <div class="card" id="projectsCard">
     <h2 style="margin-bottom:4px;">Saved projects</h2>
-    <p class="hint">Sends saved with a project name. Response reports will build on these.</p>
+    <p class="hint">Sends saved with a project name. Response reports will build on these. Regenerating drafts updates the project you just saved instead of adding a second one &mdash; and Delete removes a project you no longer need.</p>
     <button type="button" class="link-btn" id="loadProjectsBtn">Load projects</button>
     <label style="font-size:13px; margin-left:10px; cursor:pointer;"><input type="checkbox" id="showAllProjects" style="accent-color:var(--orange);"> Show everyone's projects</label>
     <div id="projectsList" style="margin-top:12px;"></div>
@@ -1575,26 +1575,54 @@ document.getElementById('generateBtn').addEventListener('click', function(){
 
 // ================= Projects (save at generate time) =================
 let currentProjectId = null;
+let currentProjectName = '';   // name the current project was saved under
 
+// Saves the drafts under the project name from step 5.
+//
+// Regenerating is normal (fix a template, change a subject, drop a contact), so
+// a second generate under the SAME name updates the project already saved in
+// this session (PUT) instead of adding another row to "Saved projects".
+// Changing the name — or reloading the page — starts a new project, and
+// anything left over can be removed with Delete.
 async function saveProject(){
-  currentProjectId = null;
   const name = document.getElementById('projectName').value.trim();
-  if (!name || !generatedResults.length) return;
+  if (!name || !generatedResults.length){
+    currentProjectId = null;
+    currentProjectName = '';
+    return;
+  }
+
+  const payload = {
+    name,
+    owner: currentUser(),
+    subjects: Array.from(new Set(generatedResults.map(r => r.subject))).slice(0, 50),
+    drafts: generatedResults.map(r => ({ email: r.email, name: r.name, subject: r.subject }))
+  };
+  const reusing = !!currentProjectId && currentProjectName === name;
+
   try {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
+    let res = await fetch(reusing ? '/api/projects/' + encodeURIComponent(currentProjectId) : '/api/projects', {
+      method: reusing ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        owner: currentUser(),
-        subjects: Array.from(new Set(generatedResults.map(r => r.subject))).slice(0, 50),
-        drafts: generatedResults.map(r => ({ email: r.email, name: r.name, subject: r.subject }))
-      })
+      body: JSON.stringify(payload)
     });
+    // The project was deleted from the list (or another tab) — save a fresh one.
+    if (reusing && res.status === 404){
+      currentProjectId = null;
+      currentProjectName = '';
+      res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
     const data = await res.json();
     if (data.ok){
+      const updated = currentProjectId === data.id;
       currentProjectId = data.id;
-      setStatus('genStatus', 'Project "' + name + '" saved with ' + generatedResults.length + ' drafts.', 'ok');
+      currentProjectName = name;
+      setStatus('genStatus', 'Project "' + name + '" ' + (updated ? 'updated' : 'saved') +
+        ' with ' + generatedResults.length + ' drafts.', 'ok');
     } else {
       setStatus('genStatus', 'Drafts are ready, but the project didn\u2019t save: ' + (data.error || 'unknown error'), 'warn');
     }
@@ -1644,18 +1672,34 @@ async function loadProjects(){
         if (this.dataset.confirm !== '1'){
           this.dataset.confirm = '1';
           this.textContent = 'Confirm delete?';
-          setTimeout(() => { this.dataset.confirm = ''; this.textContent = 'Delete'; }, 4000);
+          setTimeout(() => {
+            if (this.disabled) return;   // a delete is already in flight
+            this.dataset.confirm = '';
+            this.textContent = 'Delete';
+          }, 4000);
           return;
         }
         this.disabled = true;
+        this.textContent = 'Deleting…';
+        const id = this.dataset.id;
         try {
-          const dres = await fetch('/api/projects/' + encodeURIComponent(this.dataset.id), { method: 'DELETE' });
-          const ddata = await dres.json();
-          if (!ddata.ok) throw new Error(ddata.error || 'Delete failed.');
+          const dres = await fetch('/api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
+          let ddata = {};
+          try { ddata = await dres.json(); } catch (err) {}
+          // A project already gone from storage (404) counts as deleted.
+          if (!ddata.ok && dres.status !== 404){
+            throw new Error(ddata.error || 'Delete failed (' + dres.status + ').');
+          }
+          if (currentProjectId === id){
+            currentProjectId = null;
+            currentProjectName = '';
+          }
           loadProjects();
         } catch (err) {
-          setStatus('projectsStatus', err.message, 'error');
+          setStatus('projectsStatus', 'Couldn’t delete that project — ' + err.message, 'error');
           this.disabled = false;
+          this.textContent = 'Delete';
+          this.dataset.confirm = '';
         }
       });
     });
