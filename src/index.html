@@ -26,7 +26,11 @@
     color:var(--ink);
     font-family:'DM Sans','Hanken Grotesk',Arial,sans-serif;
     line-height:1.5;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
   }
+  header a.logo-link{ display:block; line-height:0; color:#fff; text-decoration:none; font-weight:700; }
   header{
     background:var(--navy);
     color:#fff;
@@ -46,6 +50,7 @@
   }
   .page-title{
     max-width:920px;
+    width:100%;
     margin:0 auto;
     padding:28px 24px 0;
     display:flex;
@@ -69,8 +74,10 @@
   }
   main{
     max-width:920px;
+    width:100%;
     margin:0 auto;
-    padding:24px 24px 80px;
+    padding:24px 24px 60px;
+    flex:1 0 auto;
   }
   .card{
     background:#fff;
@@ -563,18 +570,30 @@
   input[type=search]:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); }
   .proj-count{ font-size:12.5px; color:#6b7280; margin:0 0 10px; }
   .proj-more{ margin-top:2px; }
-  footer{
-    text-align:center;
-    font-size:12px;
-    color:#9a9691;
-    padding:20px 0 40px;
+  /* ---- animated Dallas skyline footer ---- */
+  .skyline{
+    margin-top:40px;
+    line-height:0;
+    user-select:none;
+    pointer-events:none;
   }
+  .skyline svg{ display:block; width:100%; height:auto; }
+  .skw{ fill:rgba(2,16,28,0.30); transition:fill 1.1s ease; }
+  .skw.warm{ fill:#FFE8C2; }
+  .skw.amber{ fill:#F5854F; }
+  .boa-glow{ stroke:#F47D48; stroke-width:2; fill:none; opacity:.4; }
+  @media (prefers-reduced-motion: no-preference){
+    .boa-glow{ animation:boaBreathe 9s ease-in-out infinite; }
+  }
+  @keyframes boaBreathe{ 0%,100%{opacity:.28;} 50%{opacity:.75;} }
 </style>
 </head>
 <body>
 
 <header>
-  <img class="logo" src="https://raw.githubusercontent.com/vanessawillis/tsglogo/main/White%20TSG%20Logo.png" alt="TSG">
+  <a class="logo-link" href="#/" title="Market Research Outreach home">
+    <img class="logo" src="https://raw.githubusercontent.com/vanessawillis/tsglogo/main/White%20TSG%20Logo.png" alt="TSG">
+  </a>
   <span class="tagline">Built for the Tenant.</span>
 </header>
 
@@ -920,7 +939,9 @@
 
 </main>
 
-<footer>TSG &mdash; internal outreach tool. Files are processed in your browser and are not uploaded anywhere.</footer>
+<div class="skyline" aria-hidden="true">
+  <svg id="skySvg" viewBox="0 0 1600 360" preserveAspectRatio="xMidYMax meet" role="presentation"></svg>
+</div>
 
 <script>
 let contacts = [];        // raw rows from excel
@@ -2567,6 +2588,187 @@ function showPage(){
 }
 window.addEventListener('hashchange', showPage);
 showPage();
+
+// ================= Dallas skyline footer =================
+// Drawn once into #skySvg: three depth layers (tan far, muted-navy mid, navy
+// front with oblique 3D extrusions) over the brand palette, with landmark
+// nods — Reunion Tower, Fountain Place, Bank of America Plaza's orange edge
+// glow, Renaissance Tower's X braces. Window lights (.skw) flicker on and off
+// at random; the interval only runs while the skyline is on screen, and
+// prefers-reduced-motion gets a static lit scene.
+(function buildSkyline(){
+  const svg = document.getElementById('skySvg');
+  if (!svg) return;
+  const BASE = 352;
+  const FACE = 'url(#skyFace)', SIDE = 'url(#skySide)', TOPF = '#0d5c8d';
+  const parts = [];
+
+  function windows(x, yt, w, h, startInset){
+    const inset = 9, top = startInset || 12, ww = 6, wh = 4, gx = 6, gy = 8;
+    const cols = Math.floor((w - 2 * inset + gx) / (ww + gx));
+    const rows = Math.floor((h - top - 16 + gy) / (wh + gy));
+    if (cols < 1 || rows < 1) return;
+    const x0 = x + (w - (cols * (ww + gx) - gx)) / 2;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        parts.push('<rect class="skw" x="' + (x0 + c * (ww + gx)) + '" y="' + (yt + top + r * (wh + gy)) +
+          '" width="' + ww + '" height="' + wh + '"/>');
+  }
+
+  function stripes(x, yt, w, h, color, op){
+    for (let y = yt + 10; y < BASE - 10; y += 9)
+      parts.push('<rect x="' + (x + 7) + '" y="' + y + '" width="' + (w - 14) + '" height="3" fill="' + color + '" opacity="' + op + '"/>');
+  }
+
+  // Oblique-extruded tower: darker side face, lit top face, left-edge highlight
+  function box(x, w, h, dx, opts){
+    opts = opts || {};
+    const dy = Math.round(dx * 0.55), yt = BASE - h;
+    parts.push('<polygon points="' + (x + w) + ',' + yt + ' ' + (x + w + dx) + ',' + (yt - dy) + ' ' +
+      (x + w + dx) + ',' + (BASE - dy) + ' ' + (x + w) + ',' + BASE + '" fill="' + SIDE + '"/>');
+    parts.push('<polygon points="' + x + ',' + yt + ' ' + (x + dx) + ',' + (yt - dy) + ' ' +
+      (x + w + dx) + ',' + (yt - dy) + ' ' + (x + w) + ',' + yt + '" fill="' + (opts.topFill || TOPF) + '"/>');
+    parts.push('<rect x="' + x + '" y="' + yt + '" width="' + w + '" height="' + h + '" fill="' + FACE + '"/>');
+    parts.push('<rect x="' + x + '" y="' + yt + '" width="2" height="' + h + '" fill="rgba(255,255,255,0.09)"/>');
+    if (opts.stripes) stripes(x, yt, w, h, opts.stripes, opts.stripeOp || 0.3);
+    else if (!opts.noWin) windows(x, yt, w, h, opts.winTop);
+  }
+
+  function backRow(list, fill, op){
+    list.forEach(b => {
+      parts.push('<rect x="' + b[0] + '" y="' + (BASE - b[2]) + '" width="' + b[1] + '" height="' + b[2] +
+        '" fill="' + fill + '" opacity="' + op + '"/>');
+    });
+  }
+
+  const defs =
+    '<defs>' +
+    '<linearGradient id="skyFace" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#0b5580"/><stop offset="1" stop-color="#053553"/></linearGradient>' +
+    '<linearGradient id="skySide" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#04314e"/><stop offset="1" stop-color="#022338"/></linearGradient>' +
+    '<clipPath id="skyBallClip"><circle cx="153" cy="185" r="31"/></clipPath>' +
+    '<clipPath id="skyChaseClip"><path d="M1152,352 L1152,152 Q1211,98 1270,152 L1270,352 Z"/></clipPath>' +
+    '<clipPath id="skyPrismClip"><polygon points="300,352 300,182 372,118 425,166 425,352"/></clipPath>' +
+    '</defs>';
+
+  // --- depth layers: far (tan) and mid (muted navy) silhouettes ---
+  backRow([[70,80,130],[240,95,110],[430,90,175],[590,110,140],[755,85,160],[925,100,128],
+           [1090,90,168],[1255,95,122],[1415,100,142],[1540,80,112]], '#bab3ad', 0.42);
+  backRow([[10,70,95],[150,110,150],[350,80,120],[500,95,200],[690,75,120],[820,110,145],
+           [1000,85,190],[1170,70,115],[1330,90,165],[1500,110,125]], '#41708e', 0.5);
+
+  // --- front layer, left to right ---
+  box(-10, 60, 72, 8);
+  box(58, 72, 105, 9);
+
+  // Reunion Tower: pavilion, column, latticed ball, antenna
+  box(128, 46, 26, 6, { noWin: true });
+  parts.push('<rect x="148" y="205" width="10" height="147" fill="#053553"/>');
+  parts.push('<rect x="144" y="240" width="18" height="4" fill="#053553"/>');
+  parts.push('<rect x="144" y="290" width="18" height="4" fill="#053553"/>');
+  parts.push('<circle cx="153" cy="185" r="31" fill="url(#skySide)"/>');
+  parts.push('<g clip-path="url(#skyBallClip)">');
+  for (let i = -4; i <= 4; i++){
+    parts.push('<line x1="' + (153 + i * 8) + '" y1="154" x2="' + (153 + i * 8) + '" y2="216" stroke="#bab3ad" stroke-width="0.8" opacity="0.5"/>');
+    parts.push('<line x1="122" y1="' + (185 + i * 8) + '" x2="184" y2="' + (185 + i * 8) + '" stroke="#bab3ad" stroke-width="0.8" opacity="0.5"/>');
+  }
+  parts.push('</g>');
+  parts.push('<circle cx="153" cy="185" r="31" fill="none" stroke="#F47D48" stroke-width="1.6" opacity="0.85"/>');
+  for (let i = 0; i < 14; i++){
+    const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * 26;
+    parts.push('<circle class="skw" cx="' + (153 + Math.cos(a) * rr).toFixed(1) + '" cy="' + (185 + Math.sin(a) * rr).toFixed(1) + '" r="1.7"/>');
+  }
+  parts.push('<line x1="153" y1="154" x2="153" y2="132" stroke="#053553" stroke-width="2.5"/>');
+
+  box(196, 92, 168, 10, { stripes: '#F47D48', stripeOp: 0.28 });
+
+  // Fountain Place: faceted glass prism, banded
+  parts.push('<polygon points="425,166 437,159 437,346 425,352" fill="url(#skySide)"/>');
+  parts.push('<polygon points="300,352 300,182 372,118 372,352" fill="#0d6394"/>');
+  parts.push('<polygon points="372,352 372,118 425,166 425,352" fill="url(#skyFace)"/>');
+  parts.push('<g clip-path="url(#skyPrismClip)">');
+  for (let y = 126; y < 348; y += 8)
+    parts.push('<rect x="300" y="' + y + '" width="125" height="2" fill="rgba(255,255,255,0.07)"/>');
+  parts.push('</g>');
+
+  // Stepped spire building
+  box(448, 48, 152, 7);
+  parts.push('<rect x="458" y="184" width="28" height="16" fill="#053553"/>');
+  parts.push('<line x1="472" y1="184" x2="472" y2="146" stroke="#053553" stroke-width="2.5"/>');
+
+  // Bank of America Plaza: tallest, with its signature edge glow (orange here)
+  box(515, 120, 278, 13);
+  parts.push('<path class="boa-glow" d="M515,350 L515,74 L635,74 L635,350"/>');
+  parts.push('<rect x="560" y="50" width="3" height="24" fill="#053553"/>');
+
+  // Renaissance Tower: X braces + twin masts
+  box(665, 94, 238, 11);
+  [[118, 208], [208, 298]].forEach(seg => {
+    parts.push('<line x1="668" y1="' + seg[0] + '" x2="756" y2="' + seg[1] + '" stroke="#F47D48" stroke-width="1.8" opacity="0.32"/>');
+    parts.push('<line x1="756" y1="' + seg[0] + '" x2="668" y2="' + seg[1] + '" stroke="#F47D48" stroke-width="1.8" opacity="0.32"/>');
+  });
+  parts.push('<line x1="688" y1="114" x2="688" y2="70" stroke="#053553" stroke-width="2.5"/>');
+  parts.push('<line x1="736" y1="114" x2="736" y2="84" stroke="#053553" stroke-width="2.5"/>');
+
+  box(772, 68, 142, 8, { stripes: '#bab3ad', stripeOp: 0.4 });
+  box(848, 96, 192, 11);
+
+  // Comerica-style stepped shoulders
+  box(956, 108, 206, 11, { noWin: true });
+  windows(956, BASE - 206, 108, 60, 10);
+  box(974, 72, 222, 9);
+
+  box(1078, 64, 132, 8);
+
+  // Chase Tower: curved crown
+  parts.push('<polygon points="1270,152 1282,145 1282,346 1270,352" fill="url(#skySide)"/>');
+  parts.push('<path d="M1152,352 L1152,152 Q1211,98 1270,152 L1270,352 Z" fill="url(#skyFace)"/>');
+  parts.push('<g clip-path="url(#skyChaseClip)">');
+  windows(1152, 110, 118, 242, 14);
+  parts.push('</g>');
+
+  box(1284, 78, 158, 9, { stripes: '#F47D48', stripeOp: 0.24 });
+
+  // Crown-topped tower (old Dallas classic)
+  box(1374, 98, 200, 10, { winTop: 16 });
+  for (let i = 0; i < 6; i++)
+    parts.push('<rect x="' + (1378 + i * 16) + '" y="142" width="9" height="10" fill="#053553"/>');
+  parts.push('<rect x="1408" y="128" width="22" height="24" fill="#053553"/>');
+  parts.push('<polygon points="1408,128 1419,118 1430,128" fill="#053553"/>');
+
+  box(1486, 72, 118, 8);
+  box(1564, 60, 86, 7);
+
+  // Street: navy band with a thin orange edge, echoing the header rule
+  parts.push('<rect x="0" y="346" width="1600" height="1.6" fill="#F47D48" opacity="0.55"/>');
+  parts.push('<rect x="0" y="347.6" width="1600" height="12.4" fill="#053553"/>');
+
+  svg.innerHTML = defs + parts.join('');
+
+  // --- window lights ---
+  const wins = Array.from(svg.querySelectorAll('.skw'));
+  const light = el => el.classList.add(Math.random() < 0.22 ? 'amber' : 'warm');
+  wins.forEach(el => { if (Math.random() < 0.18) light(el); });
+
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !wins.length) return;
+  let timer = null;
+  function tick(){
+    for (let i = 0; i < 3; i++){
+      const el = wins[Math.floor(Math.random() * wins.length)];
+      if (el.classList.contains('warm') || el.classList.contains('amber')) el.classList.remove('warm', 'amber');
+      else if (Math.random() < 0.35) light(el);   // biased so ~1/4 stay lit
+    }
+  }
+  const start = () => { if (!timer) timer = setInterval(tick, 650); };
+  const stop = () => { if (timer){ clearInterval(timer); timer = null; } };
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver(entries => entries.forEach(e => e.isIntersecting ? start() : stop())).observe(svg);
+  } else {
+    start();
+  }
+})();
 </script>
 
 </body>
