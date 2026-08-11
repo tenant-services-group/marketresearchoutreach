@@ -426,6 +426,47 @@
   .monday-choice{ display:flex; gap:18px; margin:0 0 12px; font-size:13.5px; flex-wrap:wrap; }
   .monday-choice label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
   .monday-choice input{ accent-color:var(--orange); }
+  /* ---- response report notes ---- */
+  .note-row{ margin-top:10px; }
+  .note-row .note-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom:4px;
+  }
+  .note-row .note-label{
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--navy);
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+  }
+  .note-save{ font-size:11.5px; color:#6b7280; }
+  .note-save.ok{ color:#0d7a3f; }
+  .note-save.error{ color:#b3261e; }
+  textarea.resp-note{
+    width:100%;
+    min-height:58px;
+    padding:8px 10px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:13px;
+    font-family:inherit;
+    line-height:1.45;
+    resize:vertical;
+    background:#FBFAF9;
+  }
+  textarea.resp-note:focus{ outline:2px solid var(--orange); outline-offset:1px; border-color:var(--orange); background:#fff; }
+  .resp-toolbar{
+    display:flex;
+    gap:14px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin:0 0 12px;
+  }
+  .resp-toolbar label{ font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .resp-toolbar input[type=checkbox]{ accent-color:var(--orange); }
   /* ---- views (home / generate / follow-up) ---- */
   .view{ display:none; }
   .view.active{ display:block; }
@@ -823,7 +864,7 @@
 
   <div class="card" id="responseCard">
     <h2 style="margin-bottom:4px;">Response report</h2>
-    <p class="hint">Pick a saved project, sign in with your work Microsoft account, and Claude reads the replies in your mailbox, pulls out the property details, and updates a Monday.com board &mdash; Notes, Square footage, and Flyer Link filled in, Email Status set to "*Email Received", Elimination Reason set to "Pending". Data Status and Affirmatives are left for your review.</p>
+    <p class="hint">Pick a saved project, sign in with your work Microsoft account, and the replies from that project's contacts are pulled from your mailbox. Type your notes on each reply &mdash; they save automatically and go to the board's Notes column. Processing updates Monday.com with your notes, Square footage and Flyer Link (extracted from each reply), Email Status "*Email Received", and Elimination Reason "Pending". Data Status and Affirmatives are left for your review.</p>
     <div class="fields-grid">
       <div class="field-item">
         <label for="respProject">Project</label>
@@ -838,6 +879,10 @@
     <div class="status" id="respStatus"></div>
     <div id="respFound" style="display:none; margin-top:12px;">
       <div class="review-summary" id="respSummary"></div>
+      <div class="resp-toolbar">
+        <button type="button" class="link-btn" id="respAllDoneBtn">Mark all completed</button>
+        <label><input type="checkbox" id="respHideDone"> Hide completed replies</label>
+      </div>
       <div id="respList"></div>
       <div class="monday-choice" style="margin-top:14px;">
         <label><input type="radio" name="respTarget" value="existing" checked> Update an existing board</label>
@@ -1726,6 +1771,7 @@ document.getElementById('generateBtn').addEventListener('click', function(){
   });
 
   renderResults(true);
+  persistSession();
   saveProject();
 });
 
@@ -1736,10 +1782,10 @@ let currentProjectName = '';   // name the current project was saved under
 // Saves the drafts under the project name from step 5.
 //
 // Regenerating is normal (fix a template, change a subject, drop a contact), so
-// a second generate under the SAME name updates the project already saved in
-// this session (PUT) instead of adding another row to "Saved projects".
-// Changing the name — or reloading the page — starts a new project, and
-// anything left over can be removed with Delete.
+// a second generate under the SAME name updates the project already saved (PUT)
+// instead of adding another row to "Saved projects" — including after a page
+// reload, since the project id is kept with the restorable drafts. Changing the
+// name starts a new project, and anything left over can be removed with Delete.
 async function saveProject(){
   const name = document.getElementById('projectName').value.trim();
   if (!name || !generatedResults.length){
@@ -1777,6 +1823,7 @@ async function saveProject(){
       const updated = currentProjectId === data.id;
       currentProjectId = data.id;
       currentProjectName = name;
+      persistSession();   // keep the project id with the restorable drafts
       setStatus('genStatus', 'Project "' + name + '" ' + (updated ? 'updated' : 'saved') +
         ' with ' + generatedResults.length + ' drafts.', 'ok');
     } else {
@@ -1925,11 +1972,35 @@ document.getElementById('viewAllProjectsBtn').addEventListener('click', function
 
 let sentSet = new Set();
 
+// Drafts, sent marks, and the current project id survive a reload: they're
+// written to localStorage on generate and on every "Open draft" click, and
+// restored on page load — so a half-finished send session resumes where it
+// left off, and a regenerate after a reload updates the same saved project
+// instead of creating a duplicate.
+const SESSION_KEY = 'tsg_outreach_session';
+
+function persistSession(){
+  if (!generatedResults.length){
+    try { localStorage.removeItem(SESSION_KEY); } catch (err) {}
+    return;
+  }
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      at: Date.now(),
+      projectId: currentProjectId,
+      projectName: currentProjectName,
+      sentKeys: Array.from(sentSet),
+      results: generatedResults.map(r => ({ name: r.name, email: r.email, subject: r.subject, body: r.body }))
+    }));
+  } catch (err) { /* storage full — drafts simply won't survive a reload */ }
+}
+
 // Clears generated drafts and the results panel — called whenever the contact
 // list changes so stale drafts can never be mixed with a new upload.
 function clearDrafts(){
   generatedResults = [];
   sentSet.clear();
+  try { localStorage.removeItem(SESSION_KEY); } catch (err) {}
   document.getElementById('resultList').innerHTML = '';
   document.getElementById('results').style.display = 'none';
   setStatus('genStatus', '', '');
@@ -1938,6 +2009,7 @@ function clearDrafts(){
 // Full page reset: wipe the saved list and reload for a clean slate.
 document.getElementById('resetPageBtn').addEventListener('click', function(){
   try { localStorage.removeItem('tsg_outreach_finalized'); } catch (err) {}
+  try { localStorage.removeItem(SESSION_KEY); } catch (err) {}
   location.reload();
 });
 
@@ -1974,6 +2046,7 @@ function renderResults(scrollTo){
       sentSet.add(this.dataset.key);
       const r = generatedResults.find(x => x.sentKey === this.dataset.key);
       if (r) reportOpened(r.email);
+      persistSession();
       setTimeout(() => renderResults(false), 150);
     });
   });
@@ -2002,6 +2075,7 @@ document.getElementById('toggleAllBtn').addEventListener('click', function(){
 
 document.getElementById('resetSentBtn').addEventListener('click', function(){
   sentSet.clear();
+  persistSession();
   renderResults(false);
 });
 
@@ -2185,9 +2259,15 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
       } catch (err) { /* attachments are best-effort */ }
     }
 
-    // Completed keys saved on the project survive page exits
+    // Completed marks and typed notes are saved on the project, so they
+    // survive page exits and re-fetches of the mailbox
     const completedSet = new Set(respProjectDetail.completed || []);
-    respReplies.forEach(r => { r.key = r.fromEmail + '|' + normalizeSubject(r.subject); r.completed = completedSet.has(r.key); });
+    const savedNotes = respProjectDetail.notes || {};
+    respReplies.forEach(r => {
+      r.key = r.fromEmail + '|' + normalizeSubject(r.subject);
+      r.completed = completedSet.has(r.key);
+      r.note = savedNotes[r.key] || '';
+    });
 
     if (!respReplies.length){
       setStatus('respStatus', 'No replies found from this project\u2019s contacts since it was sent.', 'warn');
@@ -2206,16 +2286,54 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
   }
 });
 
+// ---- per-reply notes: typed by the user, saved on the project, sent to Monday ----
+let respHideDone = false;
+const noteSaveTimers = {};
+
+function setNoteInd(idx, text, cls){
+  const el = document.querySelector('.note-save[data-idx="' + idx + '"]');
+  if (el){ el.textContent = text; el.className = 'note-save' + (cls ? ' ' + cls : ''); }
+}
+
+function scheduleNoteSave(idx){
+  clearTimeout(noteSaveTimers[idx]);
+  noteSaveTimers[idx] = setTimeout(() => flushNoteSave(idx), 900);
+}
+
+async function flushNoteSave(idx){
+  clearTimeout(noteSaveTimers[idx]);
+  delete noteSaveTimers[idx];
+  const r = respReplies[idx];
+  if (!r || !respProjectDetail) return;
+  const value = r.note;
+  setNoteInd(idx, 'Saving\u2026', '');
+  try {
+    const res = await fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: { [r.key]: value } })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'save failed');
+    // if the user kept typing, a newer save is queued \u2014 leave its indicator alone
+    if (r.note === value) setNoteInd(idx, 'Saved \u2713', 'ok');
+  } catch (err) {
+    setNoteInd(idx, 'Not saved \u2014 it will retry on your next edit', 'error');
+  }
+}
+
 function renderRespList(){
   const pending = respReplies.filter(r => !r.completed).length;
   const matched = respReplies.filter(r => r.addresses.length).length;
+  const done = respReplies.length - pending;
   document.getElementById('respSummary').innerHTML =
     '<b>' + respReplies.length + '</b> repl' + (respReplies.length === 1 ? 'y' : 'ies') + ' found \u2014 <b>' +
     matched + '</b> matched to properties, <b>' + pending + '</b> pending upload' +
-    (respReplies.length - pending ? ', ' + (respReplies.length - pending) + ' completed (excluded)' : '') + '.';
+    (done ? ', ' + done + ' completed (excluded' + (respHideDone ? ', hidden' : '') + ')' : '') + '.';
   const list = document.getElementById('respList');
   list.innerHTML = '';
   respReplies.forEach((r, idx) => {
+    if (respHideDone && r.completed) return;
     const row = document.createElement('div');
     row.className = 'result-row' + (r.completed ? ' sent' : '');
     row.innerHTML = '<div class="result-meta">' +
@@ -2224,6 +2342,11 @@ function renderRespList(){
       '<div class="subj">' + escapeHtml(r.addresses.join(' | ') || '(no address matched)') + '</div>' +
       (r.attachments.length ? '<div class="subj">&#128206; ' + escapeHtml(r.attachments.map(a => a.name).join(', ')) + '</div>' : '') +
       '<details><summary>Preview reply</summary><pre>' + escapeHtml(r.bodyText.slice(0, 1200)) + '</pre></details>' +
+      '<div class="note-row">' +
+        '<div class="note-head"><span class="note-label">Your note \u2014 goes to the Monday Notes column</span>' +
+        '<span class="note-save" data-idx="' + idx + '"></span></div>' +
+        '<textarea class="resp-note" data-idx="' + idx + '" maxlength="1000" placeholder="Availability, rate, terms\u2026 saves as you type">' + escapeHtml(r.note || '') + '</textarea>' +
+      '</div>' +
       '</div>' +
       '<div class="result-actions"><button type="button" class="copy-btn resp-done" data-idx="' + idx + '">' + (r.completed ? 'Mark pending' : 'Mark completed') + '</button></div>';
     list.appendChild(row);
@@ -2243,7 +2366,36 @@ function renderRespList(){
       } catch (err) { /* state already reflected locally; saved next time */ }
     });
   });
+  list.querySelectorAll('.resp-note').forEach(ta => {
+    const idx = Number(ta.dataset.idx);
+    ta.addEventListener('input', function(){
+      respReplies[idx].note = this.value;
+      scheduleNoteSave(idx);
+    });
+    ta.addEventListener('blur', function(){
+      if (noteSaveTimers[idx] !== undefined) flushNoteSave(idx);
+    });
+  });
 }
+
+document.getElementById('respAllDoneBtn').addEventListener('click', async function(){
+  const keys = respReplies.filter(r => !r.completed).map(r => r.key);
+  if (!keys.length || !respProjectDetail) return;
+  respReplies.forEach(r => { r.completed = true; });
+  renderRespList();
+  try {
+    await fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addCompleted: keys })
+    });
+  } catch (err) { /* reflected locally; saved next time */ }
+});
+
+document.getElementById('respHideDone').addEventListener('change', function(){
+  respHideDone = this.checked;
+  renderRespList();
+});
 
 function syncRespBoardLists(){
   fillBoardSelect('respBoard', document.getElementById('respBoardFilter').value);
@@ -2293,6 +2445,7 @@ document.getElementById('respGoBtn').addEventListener('click', async function(){
       (data.createdItems ? ', created ' + data.createdItems : '') +
       (data.unmatched.length ? ' \u2014 ' + data.unmatched.length + ' unmatched for manual review' : '') +
       (data.failed.length ? ' \u2014 ' + data.failed.length + ' failed' : '') +
+      (data.claudeSkipped ? ' \u2014 square footage/flyer extraction skipped (Claude isn\u2019t configured)' : '') +
       (data.boardUrl ? '. <a href="' + escapeHtml(data.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
     document.getElementById('respExcelBtn').style.display = respResults.length ? '' : 'none';
     // Auto-mark uploaded replies completed so a re-run can't duplicate them
@@ -2325,6 +2478,11 @@ document.getElementById('respExcelBtn').addEventListener('click', function(){
 });
 
 // ================= Restore a previously finalized list =================
+// The session blob must be read BEFORE the list restore: the silent
+// re-finalize below runs clearDrafts, which deletes it from localStorage.
+let pendingSession = null;
+try { pendingSession = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (err) {}
+
 (function restoreFinalized(){
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('tsg_outreach_finalized') || 'null'); } catch (err) {}
@@ -2339,6 +2497,31 @@ document.getElementById('respExcelBtn').addEventListener('click', function(){
     const when = new Date(saved.at);
     setStatus('finalizeStatus', 'Loaded ' + contacts.length + ' contacts finalized ' + when.toLocaleString() + '. Edit and re-finalize, or use "Start over" to clear.', 'ok');
   }
+})();
+
+// ================= Restore generated drafts and sent marks =================
+(function restoreDrafts(){
+  const sess = pendingSession;
+  pendingSession = null;
+  if (!sess || !Array.isArray(sess.results) || !sess.results.length) return;
+  generatedResults = sess.results.map(r => {
+    const email = r.email || '';
+    const subject = r.subject || '';
+    const body = r.body || '';
+    return {
+      name: r.name || '', email, subject, body,
+      mailto: 'mailto:' + encodeURIComponent(email) +
+        '?subject=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(body),
+      sentKey: 'tsg_sent_' + email.toLowerCase() + '|' + subject
+    };
+  });
+  sentSet = new Set(Array.isArray(sess.sentKeys) ? sess.sentKeys : []);
+  currentProjectId = sess.projectId || null;
+  currentProjectName = sess.projectName || '';
+  document.getElementById('projectName').value = currentProjectName;
+  renderResults(false);
+  persistSession();   // the list restore's clearDrafts wiped the blob — re-save it
 })();
 
 // ================= Pages (home / generate / follow-up) =================

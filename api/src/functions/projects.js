@@ -10,8 +10,13 @@
  *                                 (used when drafts are regenerated, so a re-generate
  *                                 updates the same project instead of duplicating it).
  *                                 Opened flags are carried forward by email address.
- *   PATCH  /api/projects/{id}   → mark drafts opened
- *                                 body: { openedEmails:["a@b.com", ...] }
+ *   PATCH  /api/projects/{id}   → incremental updates; body may combine:
+ *                                 { openedEmails:["a@b.com", ...] }      mark drafts opened
+ *                                 { addCompleted:[key], removeCompleted:[key] }
+ *                                     reply keys ("email|normalized subject") the user
+ *                                     marked completed in the response report
+ *                                 { notes: {key: "text", ...} }          per-reply notes;
+ *                                     merged in, an empty string removes the note
  *   DELETE /api/projects/{id}   → delete a project
  *
  * Debug: set DEBUG_RESPONSE=true on the SWA to include error detail in responses.
@@ -28,6 +33,11 @@ const LIMITS = {
   maxDrafts: 500,
   maxSubjects: 50,
   listTop: 200,
+  replyKey: 800,     // "email|normalized subject" — subjects can be long address lists
+  noteText: 1000,
+  // Azure Table caps a single string property at 64 KB; keep the serialized
+  // completed/notes JSON safely under it rather than failing on the write.
+  jsonBudget: 60000,
 };
 
 const clean = (v, max) =>
@@ -51,11 +61,11 @@ app.http('projects', {
       await ensureTable();
       const id = request.params.id || '';
 
-      if (request.method === 'GET' && !id) return await listProjects();
+      if (request.method === 'GET' && !id) return await listProjects(request);
       if (request.method === 'GET') return await getProject(id);
       if (request.method === 'POST') return await createProject(request);
       if (request.method === 'PUT') return await replaceProject(request, id);
-      if (request.method === 'PATCH') return await markOpened(request, id);
+      if (request.method === 'PATCH') return await patchProject(request, id);
       if (request.method === 'DELETE') return await deleteProject(id);
       return json(405, { ok: false, error: 'Method not allowed.' });
     } catch (err) {
@@ -72,16 +82,20 @@ app.http('projects', {
   },
 });
 
-async function listProjects() {
+async function listProjects(request) {
+  // ?owner=email narrows the list to projects saved while signed in as that user
+  const owner = clean(request.query.get('owner') || '', LIMITS.email).toLowerCase();
   const client = getClient();
   const items = [];
   const iter = client.listEntities({ queryOptions: { filter: `PartitionKey eq '${PARTITION}'` } });
   for await (const e of iter) {
+    if (owner && (e.owner || '').toLowerCase() !== owner) continue;
     let opened = 0;
     try { opened = JSON.parse(e.draftsJson || '[]').filter(d => d.opened).length; } catch (err) {}
     items.push({
       id: e.rowKey,
       name: e.name || '(unnamed)',
+      owner: e.owner || '',
       createdAt: e.createdAt || '',
       draftCount: e.draftCount || 0,
       openedCount: opened,
@@ -100,9 +114,13 @@ async function getProject(id) {
     try { drafts = JSON.parse(e.draftsJson || '[]'); } catch (err) {}
     let subjects = [];
     try { subjects = JSON.parse(e.subjectsJson || '[]'); } catch (err) {}
+    let completed = [];
+    try { completed = JSON.parse(e.completedJson || '[]'); } catch (err) {}
+    let notes = {};
+    try { notes = JSON.parse(e.notesJson || '{}') || {}; } catch (err) {}
     return json(200, {
       ok: true,
-      project: { id: e.rowKey, name: e.name, createdAt: e.createdAt, subjects, drafts },
+      project: { id: e.rowKey, name: e.name, owner: e.owner || '', createdAt: e.createdAt, subjects, drafts, completed, notes },
     });
   } catch (err) {
     if (err.statusCode === 404) return json(404, { ok: false, error: 'Project not found.' });
@@ -136,7 +154,9 @@ async function readProjectBody(request) {
     .map(s => clean(s, LIMITS.subject))
     .filter(Boolean);
 
-  return { name, drafts, subjects };
+  const owner = clean(body.owner, LIMITS.email).toLowerCase();
+
+  return { name, drafts, subjects, owner };
 }
 
 async function createProject(request) {
@@ -148,6 +168,7 @@ async function createProject(request) {
     partitionKey: PARTITION,
     rowKey: id,
     name: parsed.name,
+    owner: parsed.owner,
     createdAt: new Date().toISOString(),
     draftCount: parsed.drafts.length,
     draftsJson: JSON.stringify(parsed.drafts),
@@ -185,17 +206,17 @@ async function replaceProject(request, id) {
       : d
   );
 
-  await client.updateEntity(
-    {
-      partitionKey: PARTITION,
-      rowKey: id,
-      name: parsed.name,
-      draftCount: drafts.length,
-      draftsJson: JSON.stringify(drafts),
-      subjectsJson: JSON.stringify(parsed.subjects),
-    },
-    'Merge'
-  );
+  // Merge update: completedJson / notesJson from the response report are untouched.
+  const update = {
+    partitionKey: PARTITION,
+    rowKey: id,
+    name: parsed.name,
+    draftCount: drafts.length,
+    draftsJson: JSON.stringify(drafts),
+    subjectsJson: JSON.stringify(parsed.subjects),
+  };
+  if (parsed.owner) update.owner = parsed.owner; // keep the original owner if this save is signed out
+  await client.updateEntity(update, 'Merge');
   return json(200, { ok: true, id });
 }
 
@@ -210,14 +231,31 @@ async function deleteProject(id) {
   return json(200, { ok: true, id });
 }
 
-async function markOpened(request, id) {
+// Incremental updates from the page: opened drafts (Generate Emails), and the
+// response report's completed marks and per-reply notes. A body may combine them.
+async function patchProject(request, id) {
   if (!id) return json(400, { ok: false, error: 'Project id is required.' });
   let body = {};
   try { body = await request.json(); } catch (err) {}
+
+  const cleanKeys = (arr) => (Array.isArray(arr) ? arr : [])
+    .map(k => clean(k, LIMITS.replyKey))
+    .filter(Boolean);
+
   const openedEmails = (Array.isArray(body.openedEmails) ? body.openedEmails : [])
     .map(e => clean(e, LIMITS.email).toLowerCase())
     .filter(Boolean);
-  if (!openedEmails.length) return json(400, { ok: false, error: 'openedEmails is required.' });
+  const addCompleted = cleanKeys(body.addCompleted);
+  const removeCompleted = cleanKeys(body.removeCompleted);
+  const noteEntries = (body.notes && typeof body.notes === 'object' && !Array.isArray(body.notes))
+    ? Object.keys(body.notes)
+        .map(k => [clean(k, LIMITS.replyKey), clean(body.notes[k], LIMITS.noteText)])
+        .filter(([k]) => k)
+    : [];
+
+  if (!openedEmails.length && !addCompleted.length && !removeCompleted.length && !noteEntries.length) {
+    return json(400, { ok: false, error: 'Nothing to update — provide openedEmails, addCompleted, removeCompleted, or notes.' });
+  }
 
   const client = getClient();
   let entity;
@@ -227,19 +265,50 @@ async function markOpened(request, id) {
     if (err.statusCode === 404) return json(404, { ok: false, error: 'Project not found.' });
     throw err;
   }
-  let drafts = [];
-  try { drafts = JSON.parse(entity.draftsJson || '[]'); } catch (err) {}
-  const now = new Date().toISOString();
-  const set = new Set(openedEmails);
-  drafts.forEach(d => {
-    if (set.has(d.email) && !d.opened) {
-      d.opened = true;
-      d.openedAt = now;
+
+  const update = { partitionKey: PARTITION, rowKey: id };
+
+  if (openedEmails.length) {
+    let drafts = [];
+    try { drafts = JSON.parse(entity.draftsJson || '[]'); } catch (err) {}
+    const now = new Date().toISOString();
+    const set = new Set(openedEmails);
+    drafts.forEach(d => {
+      if (set.has(d.email) && !d.opened) {
+        d.opened = true;
+        d.openedAt = now;
+      }
+    });
+    update.draftsJson = JSON.stringify(drafts);
+  }
+
+  if (addCompleted.length || removeCompleted.length) {
+    let completed = [];
+    try { completed = JSON.parse(entity.completedJson || '[]'); } catch (err) {}
+    const set = new Set(completed.filter(k => typeof k === 'string'));
+    addCompleted.forEach(k => set.add(k));
+    removeCompleted.forEach(k => set.delete(k));
+    const completedJson = JSON.stringify(Array.from(set));
+    if (completedJson.length > LIMITS.jsonBudget) {
+      return json(400, { ok: false, error: 'This project has too many completed marks to store.' });
     }
-  });
-  await client.updateEntity(
-    { partitionKey: PARTITION, rowKey: id, draftsJson: JSON.stringify(drafts) },
-    'Merge'
-  );
-  return json(200, { ok: true, opened: drafts.filter(d => d.opened).length });
+    update.completedJson = completedJson;
+  }
+
+  if (noteEntries.length) {
+    let notes = {};
+    try { notes = JSON.parse(entity.notesJson || '{}') || {}; } catch (err) {}
+    noteEntries.forEach(([k, text]) => {
+      if (text) notes[k] = text;
+      else delete notes[k]; // an emptied note is removed, keeping the map small
+    });
+    const notesJson = JSON.stringify(notes);
+    if (notesJson.length > LIMITS.jsonBudget) {
+      return json(400, { ok: false, error: 'This project has too many notes to store — shorten or clear some.' });
+    }
+    update.notesJson = notesJson;
+  }
+
+  await client.updateEntity(update, 'Merge');
+  return json(200, { ok: true });
 }

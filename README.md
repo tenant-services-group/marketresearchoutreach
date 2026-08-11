@@ -24,7 +24,7 @@ Everything is served from the one `src/index.html` file; the pages are hash rout
 4. **Choose a subject line** — the contact's property addresses, the same addresses behind a label you type (e.g. `Dallas - 123 Elm St. | 456 Lake Rd.` — a prefix, not a filter), or one custom subject used on every draft.
 5. **Generate** — one draft per unique email address. "Open draft" launches the default mail client (Outlook) via `mailto:`; "Copy body" is the fallback for clients that truncate long `mailto:` bodies.
 
-A finalized list is saved in the browser's local storage, so refreshing or returning to the page restores it automatically (with the finalize timestamp shown). "Start over" clears the saved list.
+A finalized list is saved in the browser's local storage, so refreshing or returning to the page restores it automatically (with the finalize timestamp shown). Generated drafts survive a reload the same way: the drafts, their green "✓ Sent" badges, and the current project are restored, so a half-finished send session resumes where it left off — and a regenerate after a reload updates the same saved project instead of creating a duplicate. "Start over" (or "Reset all") clears both.
 
 ## Privacy
 
@@ -36,9 +36,18 @@ Adding a **project name** in step 5 before generating saves the send — contact
 
 The **Saved projects** card on the Project Follow-up page loads itself the first time that page is opened, and shows the **5 most recent** projects with a **View all** toggle for the rest. The search box filters the full list by project name, owner, or saved date; results stay capped at 5 until "View all" is clicked. Each row has a **Delete** button (click once to arm, again to confirm). The Response report's project picker always lists every project, searched or not.
 
-Regenerating drafts does **not** create a second project: as long as the project name is unchanged, a re-generate updates the project saved a moment ago (drafts, subjects, and count are replaced; contacts that already opened a draft keep that status). Changing the project name — or reloading the page first — starts a new project, and anything left over can be removed with Delete.
+Regenerating drafts does **not** create a second project: as long as the project name is unchanged, a re-generate updates the project saved earlier (drafts, subjects, and count are replaced; contacts that already opened a draft keep that status) — including after a page reload, since the current project travels with the restored drafts. Changing the project name starts a new project, and anything left over can be removed with Delete.
 
-API routes: `GET /api/projects`, `GET /api/projects/{id}`, `POST /api/projects`, `PUT /api/projects/{id}` (replace on regenerate), `PATCH /api/projects/{id}` (mark opened), `DELETE /api/projects/{id}`.
+API routes: `GET /api/projects` (optionally `?owner=email`), `GET /api/projects/{id}`, `POST /api/projects`, `PUT /api/projects/{id}` (replace on regenerate), `PATCH /api/projects/{id}` (incremental: `openedEmails`, `addCompleted`/`removeCompleted`, `notes`), `DELETE /api/projects/{id}`.
+
+## Response report
+
+On the Project Follow-up page: pick a saved project, sign in with a work Microsoft account, and "Check for replies" pulls that project's replies from the signed-in mailbox. Each reply row has:
+
+- **A note box** — type availability, rate, terms, anything; notes save automatically as you type (with a "Saved ✓" indicator) **onto the project record**, so they're still there when the report is reopened later or on another machine. These notes are what goes to the Monday board's **Notes** column — Claude does not write notes.
+- **Mark completed** — also saved on the project record, so completed replies stay marked across sessions. Processed replies are auto-marked. "Mark all completed" does the whole list at once, and "Hide completed replies" collapses finished rows out of view.
+
+"Process replies & update Monday" sends each pending reply to the board: your note in Notes, Square footage and Flyer Link extracted from the reply by Claude (best-effort — if `ANTHROPIC_API_KEY` isn't configured, the run still completes and those two columns are left blank), Email Status "*Email Received", Elimination Reason "Pending", attachments uploaded to the item's File column. Data Status and Affirmatives are left for manual review.
 
 ## Monday.com sync
 
@@ -57,7 +66,9 @@ api/
   package.json
   src/functions/projects.js
   src/functions/monday.js
+  src/functions/respond.js
   src/shared/store.js
+  src/shared/monday-client.js
 README.md
 ```
 
