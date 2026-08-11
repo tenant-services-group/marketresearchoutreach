@@ -52,7 +52,7 @@
     max-width:920px;
     width:100%;
     margin:0 auto;
-    padding:28px 24px 0;
+    padding:18px 24px 0;
     display:flex;
     justify-content:space-between;
     align-items:flex-start;
@@ -500,7 +500,7 @@
     background:#fff;
     border:1px solid var(--line);
     border-radius:10px;
-    padding:26px 24px 22px;
+    padding:20px 22px 16px;
     text-decoration:none;
     color:inherit;
     transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
@@ -511,18 +511,18 @@
     transform:translateY(-2px);
   }
   .home-icon{
-    width:56px;
-    height:56px;
-    border-radius:12px;
+    width:46px;
+    height:46px;
+    border-radius:11px;
     background:var(--navy);
     display:flex;
     align-items:center;
     justify-content:center;
-    margin-bottom:16px;
+    margin-bottom:12px;
     flex-shrink:0;
   }
   .home-card:hover .home-icon{ background:var(--orange); }
-  .home-icon svg{ width:28px; height:28px; display:block; }
+  .home-icon svg{ width:24px; height:24px; display:block; }
   .home-card h3{
     font-family:'Playfair Display','Libre Franklin',Georgia,serif;
     font-size:20px;
@@ -530,12 +530,12 @@
     color:var(--navy);
   }
   .home-card p{
-    margin:0 0 14px;
+    margin:0 0 10px;
     font-size:13.5px;
     color:#6b7280;
   }
   .home-card ul{
-    margin:0 0 18px;
+    margin:0 0 12px;
     padding-left:18px;
     font-size:13px;
     color:#6b7280;
@@ -571,21 +571,24 @@
   .proj-count{ font-size:12.5px; color:#6b7280; margin:0 0 10px; }
   .proj-more{ margin-top:2px; }
   /* ---- animated Dallas skyline footer ---- */
+  body.home main{ padding-bottom:12px; }
   .skyline{
-    margin-top:40px;
+    margin-top:16px;
     line-height:0;
     user-select:none;
     pointer-events:none;
+    overflow:hidden;
   }
-  .skyline svg{ display:block; width:100%; height:auto; }
-  .skw{ fill:rgba(2,16,28,0.30); transition:fill 1.1s ease; }
+  .skyline svg{ display:block; width:100%; height:220px; }
+  .skw{ fill:rgba(2,16,28,0.30); transition:fill .5s ease; }
   .skw.warm{ fill:#FFE8C2; }
   .skw.amber{ fill:#F5854F; }
+  .skw.wave{ fill:#FFE8C2; }
   .boa-glow{ stroke:#F47D48; stroke-width:2; fill:none; opacity:.4; }
   @media (prefers-reduced-motion: no-preference){
-    .boa-glow{ animation:boaBreathe 9s ease-in-out infinite; }
+    .boa-glow{ animation:boaBreathe 6.5s ease-in-out infinite; }
   }
-  @keyframes boaBreathe{ 0%,100%{opacity:.28;} 50%{opacity:.75;} }
+  @keyframes boaBreathe{ 0%,100%{opacity:.22;} 50%{opacity:.9;} }
 </style>
 </head>
 <body>
@@ -940,7 +943,7 @@
 </main>
 
 <div class="skyline" aria-hidden="true">
-  <svg id="skySvg" viewBox="0 0 1600 360" preserveAspectRatio="xMidYMax meet" role="presentation"></svg>
+  <svg id="skySvg" viewBox="0 0 4800 360" preserveAspectRatio="xMidYMax slice" role="presentation"></svg>
 </div>
 
 <script>
@@ -2582,6 +2585,7 @@ function showPage(){
   document.getElementById('homeCrumb').style.display = name === 'home' ? 'none' : '';
   document.getElementById('signInBtn').style.display = name === 'home' ? 'none' : '';
   document.getElementById('resetPageBtn').style.display = name === 'generate' ? '' : 'none';
+  document.body.classList.toggle('home', name === 'home');
   // Saved projects load themselves the first time the follow-up page is opened.
   if (name === 'followup' && !projectsLoaded) loadProjects();
   window.scrollTo(0, 0);
@@ -2590,29 +2594,36 @@ window.addEventListener('hashchange', showPage);
 showPage();
 
 // ================= Dallas skyline footer =================
-// Drawn once into #skySvg: three depth layers (tan far, muted-navy mid, navy
-// front with oblique 3D extrusions) over the brand palette, with landmark
-// nods — Reunion Tower, Fountain Place, Bank of America Plaza's orange edge
-// glow, Renaissance Tower's X braces. Window lights (.skw) flicker on and off
-// at random; the interval only runs while the skyline is on screen, and
-// prefers-reduced-motion gets a static lit scene.
+// Drawn once into #skySvg: a 4800-unit-wide city — the landmark cluster
+// (Reunion Tower, Fountain Place, Bank of America Plaza's orange edge glow,
+// Renaissance Tower's X braces) centered, generated filler blocks on both
+// wings — over three depth layers in the brand palette, with oblique 3D
+// extrusions. preserveAspectRatio="xMidYMax slice" keeps buildings in true
+// proportion at any size (the scene crops its wings instead of stretching),
+// and fitSkyline() sizes the band to exactly the room left under the page
+// content, so the home page never needs a scroll to see it. Lights: constant
+// random window churn plus an occasional floor-by-floor "wave" up a random
+// tower; everything pauses while off-screen, and prefers-reduced-motion gets
+// a static lit scene.
 (function buildSkyline(){
   const svg = document.getElementById('skySvg');
   if (!svg) return;
   const BASE = 352;
   const FACE = 'url(#skyFace)', SIDE = 'url(#skySide)', TOPF = '#0d5c8d';
   const parts = [];
+  let bCount = 0;   // building counter — tags each window grid for the wave effect
 
   function windows(x, yt, w, h, startInset){
     const inset = 9, top = startInset || 12, ww = 6, wh = 4, gx = 6, gy = 8;
     const cols = Math.floor((w - 2 * inset + gx) / (ww + gx));
     const rows = Math.floor((h - top - 16 + gy) / (wh + gy));
     if (cols < 1 || rows < 1) return;
+    const b = ++bCount;
     const x0 = x + (w - (cols * (ww + gx) - gx)) / 2;
     for (let r = 0; r < rows; r++)
       for (let c = 0; c < cols; c++)
-        parts.push('<rect class="skw" x="' + (x0 + c * (ww + gx)) + '" y="' + (yt + top + r * (wh + gy)) +
-          '" width="' + ww + '" height="' + wh + '"/>');
+        parts.push('<rect class="skw" data-b="' + b + '" data-r="' + r + '" x="' + (x0 + c * (ww + gx)) +
+          '" y="' + (yt + top + r * (wh + gy)) + '" width="' + ww + '" height="' + wh + '"/>');
   }
 
   function stripes(x, yt, w, h, color, op){
@@ -2652,13 +2663,34 @@ showPage();
     '<clipPath id="skyPrismClip"><polygon points="300,352 300,182 372,118 425,166 425,352"/></clipPath>' +
     '</defs>';
 
-  // --- depth layers: far (tan) and mid (muted navy) silhouettes ---
-  backRow([[70,80,130],[240,95,110],[430,90,175],[590,110,140],[755,85,160],[925,100,128],
-           [1090,90,168],[1255,95,122],[1415,100,142],[1540,80,112]], '#bab3ad', 0.42);
-  backRow([[10,70,95],[150,110,150],[350,80,120],[500,95,200],[690,75,120],[820,110,145],
-           [1000,85,190],[1170,70,115],[1330,90,165],[1500,110,125]], '#41708e', 0.5);
+  // --- depth layers: far (tan) and mid (muted navy) silhouettes, full width ---
+  function genBack(fill, op, hmin, hspan){
+    const list = [];
+    for (let x = 10 + Math.random() * 90; x < 4740; x += 110 + Math.random() * 90)
+      list.push([x, 60 + Math.random() * 60, hmin + Math.random() * hspan]);
+    backRow(list, fill, op);
+  }
+  genBack('#bab3ad', 0.42, 100, 80);
+  genBack('#41708e', 0.5, 90, 115);
 
-  // --- front layer, left to right ---
+  // --- generated filler towers on the left wing ---
+  function wing(x0, x1){
+    let x = x0 + Math.random() * 40;
+    while (x < x1 - 75){
+      const w = 55 + Math.random() * 60;
+      const h = 85 + Math.random() * 135;
+      const roll = Math.random();
+      const opts = roll < 0.22 ? { stripes: Math.random() < 0.5 ? '#F47D48' : '#bab3ad', stripeOp: 0.28 }
+                 : roll < 0.36 ? { noWin: true } : {};
+      box(x, w, h, 7 + Math.random() * 5, opts);
+      x += w + 20 + Math.random() * 45;
+    }
+  }
+  wing(0, 1600);
+  const bWingEnd = bCount;
+
+  // --- landmark cluster, centered in the 4800-unit scene ---
+  parts.push('<g transform="translate(1600,0)">');
   box(-10, 60, 72, 8);
   box(58, 72, 105, 9);
 
@@ -2739,12 +2771,31 @@ showPage();
 
   box(1486, 72, 118, 8);
   box(1564, 60, 86, 7);
+  parts.push('</g>');
+  const bCenterEnd = bCount;
+
+  // --- generated filler towers on the right wing ---
+  wing(3200, 4800);
 
   // Street: navy band with a thin orange edge, echoing the header rule
-  parts.push('<rect x="0" y="346" width="1600" height="1.6" fill="#F47D48" opacity="0.55"/>');
-  parts.push('<rect x="0" y="347.6" width="1600" height="12.4" fill="#053553"/>');
+  parts.push('<rect x="0" y="346" width="4800" height="1.6" fill="#F47D48" opacity="0.55"/>');
+  parts.push('<rect x="0" y="347.6" width="4800" height="12.4" fill="#053553"/>');
 
   svg.innerHTML = defs + parts.join('');
+
+  // --- size the band to the room left under the page content ---
+  function fitSkyline(){
+    const view = document.querySelector('.view.active');
+    if (!view) return;
+    const pad = parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom) || 0;
+    const margin = parseFloat(getComputedStyle(svg.parentNode).marginTop) || 0;
+    const bottom = view.offsetTop + view.offsetHeight + pad + margin;
+    svg.style.height = Math.max(100, Math.min(380, window.innerHeight - bottom)) + 'px';
+  }
+  fitSkyline();
+  window.addEventListener('resize', fitSkyline);
+  window.addEventListener('load', fitSkyline);
+  window.addEventListener('hashchange', function(){ setTimeout(fitSkyline, 0); });
 
   // --- window lights ---
   const wins = Array.from(svg.querySelectorAll('.skw'));
@@ -2753,16 +2804,45 @@ showPage();
 
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce || !wins.length) return;
-  let timer = null;
+
+  // group windows by building for the wave effect (bigger towers only)
+  const byBuilding = {};
+  wins.forEach(el => {
+    const b = el.getAttribute('data-b');
+    if (b) (byBuilding[b] = byBuilding[b] || []).push(el);
+  });
+  const towers = Object.keys(byBuilding).filter(b => byBuilding[b].length >= 24);
+  // the center cluster stays on screen at every size; the wings crop away
+  const centerTowers = towers.filter(b => Number(b) > bWingEnd && Number(b) <= bCenterEnd);
+
+  let churn = null, waveTimer = null;
   function tick(){
-    for (let i = 0; i < 3; i++){
+    for (let i = 0; i < 7; i++){
       const el = wins[Math.floor(Math.random() * wins.length)];
       if (el.classList.contains('warm') || el.classList.contains('amber')) el.classList.remove('warm', 'amber');
       else if (Math.random() < 0.35) light(el);   // biased so ~1/4 stay lit
     }
   }
-  const start = () => { if (!timer) timer = setInterval(tick, 650); };
-  const stop = () => { if (timer){ clearInterval(timer); timer = null; } };
+  // floor-by-floor light-up sweeping one random tower, then a rippled fade back
+  function wave(){
+    const pool = (centerTowers.length && Math.random() < 0.75) ? centerTowers : towers;
+    const els = byBuilding[pool[Math.floor(Math.random() * pool.length)]];
+    if (!els || !els.length) return;
+    const rows = {};
+    els.forEach(el => { const r = el.getAttribute('data-r'); (rows[r] = rows[r] || []).push(el); });
+    const order = Object.keys(rows).map(Number).sort((a, b) => b - a);   // bottom floor first
+    order.forEach((r, i) => rows[r].forEach(el => {
+      el.style.transitionDelay = (i * 60) + 'ms';
+      el.classList.add('wave');
+    }));
+    setTimeout(() => els.forEach(el => el.classList.remove('wave')), order.length * 60 + 1400);
+    setTimeout(() => els.forEach(el => { el.style.transitionDelay = ''; }), order.length * 60 + 3400);
+  }
+  function scheduleWave(){
+    waveTimer = setTimeout(function(){ wave(); scheduleWave(); }, 3500 + Math.random() * 3000);
+  }
+  const start = () => { if (!churn){ churn = setInterval(tick, 260); scheduleWave(); } };
+  const stop = () => { if (churn){ clearInterval(churn); churn = null; clearTimeout(waveTimer); } };
   if ('IntersectionObserver' in window){
     new IntersectionObserver(entries => entries.forEach(e => e.isIntersecting ? start() : stop())).observe(svg);
   } else {
