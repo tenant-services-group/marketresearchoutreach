@@ -7,18 +7,24 @@
  *
  *   POST /api/respond → body:
  *     { target: {type:'existing', boardId} | {type:'new', workspaceId, name},
- *       replies: [{ fromEmail, fromName, receivedAt, subject, bodyText, addresses:[..] }] }
- *     → { ok, boardId, boardUrl, updated, createdItems, unmatched:[..],
+ *       replies: [{ fromEmail, fromName, receivedAt, subject, bodyText, note, addresses:[..] }] }
+ *     → { ok, boardId, boardUrl, updated, createdItems, unmatched:[..], claudeSkipped,
  *         results:[{address, notes, squareFootage, flyerLink, fromEmail, receivedAt}], failed:[..] }
  *
- * For each reply, Claude extracts { notes, squareFootage, flyerLinks } from the body.
+ * The Monday Notes column comes from `note` — text the user typed on the reply in
+ * the response report. Claude no longer writes notes; it only extracts
+ * { squareFootage, flyerLinks } from the reply body, and that extraction is
+ * best-effort: with no ANTHROPIC_API_KEY the run still completes (claudeSkipped
+ * is set and those two columns are simply left blank).
  * Board updates per matched address:
  *   Email Status → "*Email Received", Elimination Reason → "Pending",
- *   Email Received Date → reply date, Notes / Square footage / Flyer Link → extracted.
+ *   Email Received Date → reply date, Notes → user note, Square footage /
+ *   Flyer Link → extracted.
  * Data Status and Affirmatives are intentionally left for manual review.
  *
- * App Settings: ANTHROPIC_API_KEY (required), CLAUDE_MODEL (optional,
- * default claude-haiku-4-5-20251001), MONDAY_API_TOKEN, ENTRA_CLIENT_ID, ENTRA_TENANT_ID.
+ * App Settings: ANTHROPIC_API_KEY (optional — enables square footage / flyer link
+ * extraction), CLAUDE_MODEL (optional, default claude-haiku-4-5-20251001),
+ * MONDAY_API_TOKEN, ENTRA_CLIENT_ID, ENTRA_TENANT_ID.
  */
 
 const { app } = require('@azure/functions');
@@ -75,21 +81,17 @@ app.http('respond', {
 
 // ---------- Claude extraction ----------
 
+// Square footage + flyer links only — the Notes column is the user's own text.
 async function extractWithClaude(reply) {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    const err = new Error('ANTHROPIC_API_KEY is not configured on the Static Web App.');
-    err.statusCode = 503;
-    throw err;
-  }
+  if (!key) return { squareFootage: '', flyerLinks: [], skipped: true };
   const model = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
   const prompt =
     'You are processing a commercial real estate broker\'s email reply to a market-research inquiry.\n' +
     'Reply subject: ' + reply.subject + '\n' +
     'Reply body:\n---\n' + reply.bodyText.slice(0, MAX_BODY) + '\n---\n\n' +
     'Extract the property details. Respond with ONLY a JSON object, no markdown fences, no preamble:\n' +
-    '{"notes": "<concise summary of the property details and any availability/terms mentioned; professional tone; exclude square footage figures (captured separately); exclude greetings and pleasantries; empty string if the reply contains no property details>",\n' +
-    ' "squareFootage": "<the available square footage exactly as stated, e.g. \\"6,800-12,500 SF\\"; empty string if not mentioned>",\n' +
+    '{"squareFootage": "<the available square footage exactly as stated, e.g. \\"6,800-12,500 SF\\"; empty string if not mentioned>",\n' +
     ' "flyerLinks": ["<any URLs in the reply that point to flyers, brochures, listings, or marketing material>"]}';
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -101,7 +103,7 @@ async function extractWithClaude(reply) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 800,
+      max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -111,14 +113,13 @@ async function extractWithClaude(reply) {
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
     return {
-      notes: clean(parsed.notes, 2000),
       squareFootage: clean(parsed.squareFootage, 200),
       flyerLinks: (Array.isArray(parsed.flyerLinks) ? parsed.flyerLinks : [])
         .map(u => clean(u, 500)).filter(u => /^https?:\/\//i.test(u)).slice(0, 5),
     };
   } catch (err) {
-    // Extraction is best-effort: fall back to the raw reply as the note
-    return { notes: clean(reply.bodyText, 2000), squareFootage: '', flyerLinks: [] };
+    // Extraction is best-effort
+    return { squareFootage: '', flyerLinks: [] };
   }
 }
 
@@ -135,6 +136,7 @@ async function processReplies(request, context) {
       fromName: clean(r.fromName, 120),
       receivedAt: clean(r.receivedAt, 40),
       subject: clean(r.subject, 500),
+      note: clean(r.note, 1000),
       bodyText: String(r.bodyText == null ? '' : r.bodyText).slice(0, MAX_BODY),
       addresses: (Array.isArray(r.addresses) ? r.addresses : []).map(a => clean(a, 255)).filter(Boolean),
       attachments: (Array.isArray(r.attachments) ? r.attachments : [])
@@ -166,20 +168,22 @@ async function processReplies(request, context) {
   const itemByName = {};
   items.forEach(it => { itemByName[it.name.trim().toLowerCase()] = it.id; });
 
-  let updated = 0, createdItems = 0;
+  let updated = 0, createdItems = 0, claudeSkipped = false;
   const results = [];
   const unmatched = [];
   const failed = [];
 
   for (const reply of replies) {
+    // Extraction failures no longer drop the reply — the user's note, statuses,
+    // and attachments still go to the board; SF / flyer just stay blank.
     let extract;
     try {
       extract = await extractWithClaude(reply);
     } catch (err) {
-      if (err.statusCode === 503) throw err;
-      failed.push({ fromEmail: reply.fromEmail, error: String(err.message).slice(0, 200) });
-      continue;
+      context.error('extraction failed:', err.message);
+      extract = { squareFootage: '', flyerLinks: [] };
     }
+    if (extract.skipped) claudeSkipped = true;
     const receivedDate = (reply.receivedAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
     const cv = {};
     cv[colId.emailStatus]       = { label: '*Email Received' };
@@ -189,7 +193,7 @@ async function processReplies(request, context) {
     // Attached files go to the item's File column (uploaded below).
     const flyerUrl = extract.flyerLinks[0] || '';
     const attachmentNames = reply.attachments.map(a => a.name);
-    let notes = extract.notes;
+    let notes = reply.note;
     if (attachmentNames.length) {
       notes = (notes ? notes + ' ' : '') + '[Attachments: ' + attachmentNames.join(', ') + ']';
     }
@@ -242,5 +246,5 @@ async function processReplies(request, context) {
     await new Promise(res => setTimeout(res, 200));
   }
 
-  return json(200, { ok: true, boardId, boardUrl, updated, createdItems, unmatched, results, failed });
+  return json(200, { ok: true, boardId, boardUrl, updated, createdItems, unmatched, results, failed, claudeSkipped });
 }
