@@ -740,12 +740,16 @@
       </div>
       <div class="fields-grid" id="mondayExistingFields" style="display:none;">
         <div class="field-item">
-          <label for="mondayBoardFilter">Search boards</label>
+          <label for="mondayBoardFilter">Search boards &amp; groups</label>
           <input type="text" id="mondayBoardFilter" placeholder="Type to filter&hellip;">
         </div>
         <div class="field-item">
           <label for="mondayBoard">Board</label>
           <select id="mondayBoard"></select>
+        </div>
+        <div class="field-item">
+          <label for="mondayGroup">Group on that board</label>
+          <select id="mondayGroup"></select>
         </div>
       </div>
       <button type="button" class="primary" id="mondayGoBtn" style="width:auto;">Sync properties</button>
@@ -842,7 +846,7 @@
     <h2><span class="step-num">5</span> Generate</h2>
     <p class="hint">This builds one draft per unique email address, combining every property address tied to that contact.</p>
     <div class="field-item" style="margin-bottom:12px;">
-      <label for="projectName">Project name &mdash; saves this send for response reports (optional)</label>
+      <label for="projectName">Project name &mdash; saves this send to Project Follow-up (required)</label>
       <input type="text" id="projectName" placeholder="e.g. Dallas Retail &mdash; Jul 2026" maxlength="120">
     </div>
     <button class="primary" id="generateBtn" disabled>Generate drafts</button>
@@ -1337,10 +1341,26 @@ let boardsCache = [];
 
 function fillBoardSelect(selectId, filter){
   const q = (filter || '').trim().toLowerCase();
-  const matches = q ? boardsCache.filter(b => b.name.toLowerCase().indexOf(q) !== -1) : boardsCache;
+  const matches = q ? boardsCache.filter(b =>
+    b.name.toLowerCase().indexOf(q) !== -1 ||
+    (b.groups || []).some(g => g.title.toLowerCase().indexOf(q) !== -1)
+  ) : boardsCache;
   document.getElementById(selectId).innerHTML =
     matches.map(b => '<option value="' + escapeHtml(b.id) + '">' + escapeHtml(b.name) + '</option>').join('') ||
     '<option value="">(no matching boards)</option>';
+}
+
+// The group list follows the board chosen for the sync; when the search text
+// matched a group's name (rather than the board's), that group is preselected.
+function fillGroupSelect(){
+  const board = boardsCache.find(b => b.id === document.getElementById('mondayBoard').value);
+  const groups = (board && board.groups) || [];
+  const q = document.getElementById('mondayBoardFilter').value.trim().toLowerCase();
+  const match = q ? groups.find(g => g.title.toLowerCase().indexOf(q) !== -1) : null;
+  document.getElementById('mondayGroup').innerHTML =
+    '<option value="">(first group on the board)</option>' +
+    groups.map(g => '<option value="' + escapeHtml(g.id) + '"' + (match && g.id === match.id ? ' selected' : '') + '>' +
+      escapeHtml(g.title) + '</option>').join('');
 }
 
 async function loadMondayLists(){
@@ -1352,12 +1372,15 @@ async function loadMondayLists(){
     data.workspaces.map(w => '<option value="' + escapeHtml(w.id) + '">' + escapeHtml(w.name) + '</option>').join('');
   boardsCache = data.boards;
   fillBoardSelect('mondayBoard', document.getElementById('mondayBoardFilter').value);
+  fillGroupSelect();
   mondayLoaded = true;
 }
 
 document.getElementById('mondayBoardFilter').addEventListener('input', function(){
   fillBoardSelect('mondayBoard', this.value);
+  fillGroupSelect();
 });
+document.getElementById('mondayBoard').addEventListener('change', fillGroupSelect);
 document.getElementById('respBoardFilter').addEventListener('input', function(){
   fillBoardSelect('respBoard', this.value);
 });
@@ -1397,7 +1420,7 @@ document.getElementById('mondayGoBtn').addEventListener('click', async function(
   } else {
     const boardId = document.getElementById('mondayBoard').value;
     if (!boardId){ setStatus('mondayStatus', 'Choose a board.', 'error'); return; }
-    target = { type: 'existing', boardId };
+    target = { type: 'existing', boardId, groupId: document.getElementById('mondayGroup').value || null };
   }
   const btn = this;
   btn.disabled = true;
@@ -1737,6 +1760,11 @@ function setupDragDrop(boxId, inputId, handler){
 // ================= Generate =================
 document.getElementById('generateBtn').addEventListener('click', function(){
   setStatus('genStatus','','');
+  if (!document.getElementById('projectName').value.trim()){
+    setStatus('genStatus', 'Enter a project name — it saves this send so you can find it later in Project Follow-up.', 'error');
+    document.getElementById('projectName').focus();
+    return;
+  }
   sentSet.clear();
   const templateText = currentTemplateText();
   const mode = document.querySelector('input[name="subjMode"]:checked').value;
