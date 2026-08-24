@@ -109,11 +109,15 @@ async function listItems(boardId) {
   return (board && board.items_page && board.items_page.items) || [];
 }
 
-async function createItem(boardId, name, columnValues) {
-  const data = await monday(
-    'mutation ($board: ID!, $name: String!, $cv: JSON!) { create_item (board_id: $board, item_name: $name, column_values: $cv, create_labels_if_missing: true) { id } }',
-    { board: boardId, name, cv: JSON.stringify(columnValues) }
-  );
+/** Create an item; groupId is optional — Monday's first group is used without it. */
+async function createItem(boardId, name, columnValues, groupId) {
+  const vars = { board: boardId, name, cv: JSON.stringify(columnValues) };
+  let q = 'mutation ($board: ID!, $name: String!, $cv: JSON!) { create_item (board_id: $board, item_name: $name, column_values: $cv, create_labels_if_missing: true) { id } }';
+  if (groupId) {
+    vars.group = String(groupId);
+    q = 'mutation ($board: ID!, $group: String!, $name: String!, $cv: JSON!) { create_item (board_id: $board, group_id: $group, item_name: $name, column_values: $cv, create_labels_if_missing: true) { id } }';
+  }
+  const data = await monday(q, vars);
   return String(data.create_item.id);
 }
 

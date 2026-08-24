@@ -2,9 +2,9 @@
 /**
  * /api/monday — Monday.com board listing + property sync.
  *
- *   GET  /api/monday/boards → { ok, workspaces:[{id,name}], boards:[{id,name,workspaceId,url}] }
+ *   GET  /api/monday/boards → { ok, workspaces:[{id,name}], boards:[{id,name,workspaceId,url,groups:[{id,title}]}] }
  *   POST /api/monday/sync   → body:
- *        { target: {type:'new', workspaceId, name} | {type:'existing', boardId},
+ *        { target: {type:'new', workspaceId, name} | {type:'existing', boardId, groupId?},
  *          rows: [{address, propertyName, leasingCompany, firstName, lastName, email, city}] }
  *        → { ok, boardId, boardUrl, created, failed:[{address, error}] }
  *
@@ -60,6 +60,7 @@ async function listBoards() {
       boards (limit: 200, order_by: created_at) {
         id name url board_kind type
         workspace { id }
+        groups { id title }
       }
     }`);
   const workspaces = (data.workspaces || []).filter(Boolean).map(w => ({ id: String(w.id), name: w.name }));
@@ -70,6 +71,7 @@ async function listBoards() {
       name: b.name,
       url: b.url,
       workspaceId: b.workspace ? String(b.workspace.id) : null,
+      groups: (b.groups || []).filter(Boolean).map(g => ({ id: String(g.id), title: g.title })),
     }));
   return json(200, { ok: true, workspaces, boards });
 }
@@ -91,7 +93,7 @@ async function syncRows(request, context) {
   })).filter(r => r.address || r.propertyName);
   if (!rows.length) return json(400, { ok: false, error: 'No rows with a property address were provided.' });
 
-  let boardId, boardUrl;
+  let boardId, boardUrl, groupId = null;
   if (target.type === 'new') {
     const name = clean(target.name, 120);
     if (!name) return json(400, { ok: false, error: 'Board name is required for a new board.' });
@@ -99,6 +101,7 @@ async function syncRows(request, context) {
   } else if (target.type === 'existing') {
     boardId = clean(target.boardId, 30);
     if (!boardId) return json(400, { ok: false, error: 'boardId is required for an existing board.' });
+    groupId = clean(target.groupId, 64) || null;
   } else {
     return json(400, { ok: false, error: 'target.type must be "new" or "existing".' });
   }
@@ -122,7 +125,7 @@ async function syncRows(request, context) {
     cv[colId.lastName]       = r.lastName;
     cv[colId.city]           = r.city;
     try {
-      await createItem(boardId, r.address || r.propertyName || ('Property ' + (i + 1)), cv);
+      await createItem(boardId, r.address || r.propertyName || ('Property ' + (i + 1)), cv, groupId);
       created++;
     } catch (err) {
       failed.push({ address: r.address || r.propertyName, error: String(err.message).slice(0, 200) });
