@@ -43,7 +43,7 @@ const COLUMNS = [
   { key: 'notes',             title: 'Notes',                type: 'long_text' },
   { key: 'squareFootage',     title: 'Square footage',       type: 'text' },
   { key: 'flyerLink',         title: 'Flyer Link',           type: 'link' },
-  { key: 'file',              title: 'File',                 type: 'file', aliases: ['files'] },
+  { key: 'file',              title: 'File',                 type: 'file', aliases: ['files', 'flyer attachment'], matchType: 'file' },
   { key: 'emailsSent',        title: 'Emails Sent',          type: 'date' },
   { key: 'followUpDate',      title: 'Follow Up Date',       type: 'date' },
   { key: 'emailReceivedDate', title: 'Email Received Date',  type: 'date' },
@@ -66,10 +66,17 @@ async function createBoard(name, workspaceId) {
 }
 
 /**
- * Ensure every schema column exists on the board (matched by title, case-insensitive).
- * Returns { colId: {key → columnId}, boardUrl }.
+ * Map the schema onto a board's existing columns (matched by title, then by type).
+ *
+ * Columns are created only when `allowCreate` is true — i.e. on a board this tool
+ * just created. Updating an existing board never alters its structure: create_column
+ * needs board-owner rights, so requiring it to add rows made every run fail with
+ * "User unauthorized to perform action" on boards whose edit permission is "owners".
+ * A column the board does not have is simply left unmapped and its value skipped.
+ *
+ * Returns { colId: {key -> column id}, colType: {key -> column type}, boardUrl }.
  */
-async function ensureColumns(boardId) {
+async function ensureColumns(boardId, allowCreate) {
   const boardData = await monday(
     'query ($id: [ID!]) { boards (ids: $id) { id url columns { id title type } } }',
     { id: [boardId] }
@@ -80,23 +87,36 @@ async function ensureColumns(boardId) {
     err.statusCode = 404;
     throw err;
   }
+  const columns = board.columns || [];
   const byTitle = {};
-  (board.columns || []).forEach(c => { byTitle[c.title.trim().toLowerCase()] = c; });
+  columns.forEach(c => { byTitle[c.title.trim().toLowerCase()] = c; });
+
+  const taken = new Set();
   const colId = {};
+  const colType = {};
   for (const col of COLUMNS) {
     const titles = [col.title.toLowerCase()].concat(col.aliases || []);
-    const existing = titles.map(t => byTitle[t]).find(Boolean);
-    if (existing) {
-      colId[col.key] = existing.id;
-    } else {
-      const created = await monday(
-        'mutation ($board: ID!, $title: String!, $type: ColumnType!) { create_column (board_id: $board, title: $title, column_type: $type) { id } }',
-        { board: boardId, title: col.title, type: col.type }
-      );
-      colId[col.key] = created.create_column.id;
+    let existing = titles.map(t => byTitle[t]).find(Boolean);
+    // No title match: reuse the board's own column of this type rather than
+    // adding a duplicate under our name.
+    if (!existing && col.matchType) {
+      existing = columns.find(c => c.type === col.matchType && !taken.has(c.id));
     }
+    if (existing) {
+      taken.add(existing.id);
+      colId[col.key] = existing.id;
+      colType[col.key] = existing.type;
+      continue;
+    }
+    if (!allowCreate) continue;
+    const created = await monday(
+      'mutation ($board: ID!, $title: String!, $type: ColumnType!) { create_column (board_id: $board, title: $title, column_type: $type) { id } }',
+      { board: boardId, title: col.title, type: col.type }
+    );
+    colId[col.key] = created.create_column.id;
+    colType[col.key] = col.type;
   }
-  return { colId, boardUrl: board.url };
+  return { colId, colType, boardUrl: board.url };
 }
 
 /** List all items (id + name) on a board, up to 500. */

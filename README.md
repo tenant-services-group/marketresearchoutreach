@@ -49,6 +49,16 @@ On the Project Follow-up page: pick a saved project, sign in with a work Microso
 
 "Process replies & update Monday" sends each pending reply to the board: your note in Notes, Square footage and Flyer Link extracted from the reply by Claude (best-effort — if `ANTHROPIC_API_KEY` isn't configured, the run still completes and those two columns are left blank), Email Status "*Email Received", Elimination Reason "Pending", attachments uploaded to the item's File column. Data Status and Affirmatives are left for manual review.
 
+Replies upload in **batches** — at most 4 replies, or roughly 20 MB of request body, per request. A single POST carrying every pending reply and its attachments overran both the Static Web Apps request-body limit (~28 MB, answered with a plain-text 413 page) and the managed API's 45-second timeout, which the page could only report as `Unexpected token 'T', "The page w"... is not valid JSON`. Each batch is now marked completed as soon as it lands, so when a later batch fails the status line says how many replies already went up and clicking the button again continues with the rest instead of re-uploading them. Attachments over 10 MB, or beyond a per-reply 18 MB budget, are left in the mailbox and listed on the reply row as "Too large to upload (kept in Outlook)".
+
+### Board columns and permissions
+
+Columns are **only created on boards this tool creates**. Updating an existing board never alters its structure, because `create_column` requires board-owner rights: a board whose edit permission is set to "owners" rejected that call with **"User unauthorized to perform action"**, and since it ran before the first row, the entire run aborted and nothing was written. Boards cloned from the "Market Research Emails Board Template" hit this on every run — their file column is titled "Flyer Attachment" rather than "File", so it never matched the schema by title and the tool tried to add a "File" column each time.
+
+Schema columns are matched by title first (aliases included), then by column type, so "Flyer Attachment" maps to the schema's file column. A column the board genuinely doesn't have is left unmapped and its value skipped rather than created. Values follow the column's real type as well: "Flyer Link" is a link column on boards this tool creates and a plain text column on the template-cloned boards, and each is written in the shape it expects.
+
+Board *sharing* is a visibility setting and is unrelated to any of this — making a board shareable does not grant edit rights. What the `MONDAY_API_TOKEN` user does still need is permission to **add and update items** on the target board; without it, individual rows fail even though no structural change is attempted.
+
 ## Monday.com sync
 
 The **Sync to Monday.com** button in the review step pushes the extracted properties (as edited) to a board — either a brand-new board in a chosen workspace or an existing board. Columns created/matched by title: Property Name, Leasing Company, Contact, Email, City, State, Zip, Status (set to "Sent"), Date Sent (today). Item name = property address. A link to the board appears when the sync finishes.

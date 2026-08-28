@@ -1339,6 +1339,38 @@ let mondayLoaded = false;
 
 let boardsCache = [];
 
+// Static Web Apps rejects request bodies over ~28 MB with a plain-text 413 page, and
+// the managed API times out at 45 s — so replies (and their base64 attachments) go up
+// in batches rather than all in one POST.
+const RESP_BATCH_MAX_JSON = 20 * 1024 * 1024;    // request-body budget per batch
+const RESP_BATCH_MAX_REPLIES = 4;                // keeps each request inside the 45s window
+const RESP_ATTACH_B64_BUDGET = 18 * 1024 * 1024; // per-reply base64 attachment budget
+
+// The API's error pages aren't JSON, so res.json() turned a 413/timeout into an
+// unreadable "Unexpected token" error. Read the text first and explain what happened.
+async function readApiJson(res){
+  const text = await res.text();
+  try { return JSON.parse(text); } catch (err) {
+    if (res.status === 413) throw new Error('The server rejected the upload as too large (HTTP 413). Remove or shrink large attachments and try again.');
+    throw new Error('The server returned an unexpected response (HTTP ' + res.status + ')' +
+      (res.status >= 500 ? ' \u2014 it may have timed out. Click the button again to continue where it left off.' : '.'));
+  }
+}
+
+function buildReplyBatches(replies){
+  const batches = [];
+  let batch = [], size = 0;
+  replies.forEach(r => {
+    const rSize = JSON.stringify(r).length;
+    if (batch.length && (size + rSize > RESP_BATCH_MAX_JSON || batch.length >= RESP_BATCH_MAX_REPLIES)){
+      batches.push(batch); batch = []; size = 0;
+    }
+    batch.push(r); size += rSize;
+  });
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
 function fillBoardSelect(selectId, filter){
   const q = (filter || '').trim().toLowerCase();
   const matches = q ? boardsCache.filter(b =>
@@ -1365,7 +1397,7 @@ function fillGroupSelect(){
 
 async function loadMondayLists(){
   const res = await fetch('/api/monday/boards');
-  const data = await res.json();
+  const data = await readApiJson(res);
   if (!data.ok) throw new Error(data.error || 'Failed to load boards.');
   const ws = document.getElementById('mondayWorkspace');
   ws.innerHTML = '<option value="">(default workspace)</option>' +
@@ -1431,7 +1463,7 @@ document.getElementById('mondayGoBtn').addEventListener('click', async function(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target, rows: extractedRows })
     });
-    const data = await res.json();
+    const data = await readApiJson(res);
     if (!data.ok) throw new Error(data.error || 'Sync failed.');
     const el = document.getElementById('mondayStatus');
     el.className = 'status ' + (data.failed.length ? 'warn' : 'ok');
@@ -2243,7 +2275,7 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
   setStatus('respStatus', 'Loading project and searching your mailbox\u2026', '');
   try {
     const pres = await fetch('/api/projects/' + encodeURIComponent(projectId));
-    const pdata = await pres.json();
+    const pdata = await readApiJson(pres);
     if (!pdata.ok) throw new Error(pdata.error || 'Failed to load the project.');
     respProjectDetail = pdata.project;
     const senderSet = new Set(respProjectDetail.drafts.map(d => d.email.toLowerCase()));
@@ -2280,11 +2312,12 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
         fromName: from.name || '',
         receivedAt: m.receivedDateTime || '',
         subject: m.subject || '',
-        bodyText: (m.body && m.body.content) || '',
+        bodyText: ((m.body && m.body.content) || '').slice(0, 16000),
         addresses: draft ? addressesFromSubject(draft.subject) : [],
         hasAttachments: !!m.hasAttachments,
         webLink: m.webLink || '',
-        attachments: []
+        attachments: [],
+        skippedAttachments: []
       });
     });
     // keep only the latest reply per sender+subject
@@ -2304,10 +2337,16 @@ document.getElementById('respFetchBtn').addEventListener('click', async function
         const ares = await fetch('https://graph.microsoft.com/v1.0/me/messages/' + encodeURIComponent(r.id) +
           '/attachments', { headers: { 'Authorization': 'Bearer ' + token } });
         const adata = await ares.json();
-        r.attachments = (adata.value || [])
-          .filter(a => !a.isInline && a.contentBytes && (a.size || 0) <= 10 * 1024 * 1024)
-          .slice(0, 3)
-          .map(a => ({ name: a.name, contentBytes: a.contentBytes }));
+        let b64Used = 0;
+        (adata.value || []).forEach(a => {
+          if (a.isInline || !a.contentBytes) return;
+          const tooBig = (a.size || 0) > 10 * 1024 * 1024 ||
+            r.attachments.length >= 3 ||
+            b64Used + a.contentBytes.length > RESP_ATTACH_B64_BUDGET;
+          if (tooBig){ r.skippedAttachments.push(a.name || 'attachment'); return; }
+          b64Used += a.contentBytes.length;
+          r.attachments.push({ name: a.name, contentBytes: a.contentBytes });
+        });
       } catch (err) { /* attachments are best-effort */ }
     }
 
@@ -2393,6 +2432,7 @@ function renderRespList(){
       '<div class="email">' + escapeHtml(r.fromEmail) + ' \u2014 ' + escapeHtml((r.receivedAt || '').slice(0, 10)) + '</div>' +
       '<div class="subj">' + escapeHtml(r.addresses.join(' | ') || '(no address matched)') + '</div>' +
       (r.attachments.length ? '<div class="subj">&#128206; ' + escapeHtml(r.attachments.map(a => a.name).join(', ')) + '</div>' : '') +
+      (r.skippedAttachments && r.skippedAttachments.length ? '<div class="subj">&#128206; Too large to upload (kept in Outlook): ' + escapeHtml(r.skippedAttachments.join(', ')) + '</div>' : '') +
       '<details><summary>Preview reply</summary><pre>' + escapeHtml(r.bodyText.slice(0, 1200)) + '</pre></details>' +
       '<div class="note-row">' +
         '<div class="note-head"><span class="note-label">Your note \u2014 goes to the Monday Notes column</span>' +
@@ -2481,39 +2521,67 @@ document.getElementById('respGoBtn').addEventListener('click', async function(){
   }
   const btn = this;
   btn.disabled = true;
-  setStatus('respGoStatus', 'Claude is reading ' + pendingReplies.length + ' repl' + (pendingReplies.length === 1 ? 'y' : 'ies') + ' and updating Monday\u2026 this can take a minute.', '');
+  // One POST carrying every pending reply (each with up to 3 base64 attachments)
+  // overran the Static Web Apps body limit and the API timeout. Send the replies in
+  // batches, marking each one completed as it lands so a retry resumes rather than
+  // re-uploading what already went up.
+  const batches = buildReplyBatches(pendingReplies);
+  let curTarget = target;
+  const totals = { updated: 0, createdItems: 0, unmatched: [], failed: [], claudeSkipped: false, boardUrl: '' };
+  respResults = [];
+  let doneReplies = 0;
   try {
-    const res = await fetch('/api/respond', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target, replies: pendingReplies })
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Processing failed.');
-    respResults = data.results || [];
-    const el = document.getElementById('respGoStatus');
-    el.className = 'status ' + (data.failed.length ? 'warn' : 'ok');
-    el.innerHTML = 'Updated ' + data.updated + ' item' + (data.updated === 1 ? '' : 's') +
-      (data.createdItems ? ', created ' + data.createdItems : '') +
-      (data.unmatched.length ? ' \u2014 ' + data.unmatched.length + ' unmatched for manual review' : '') +
-      (data.failed.length ? ' \u2014 ' + data.failed.length + ' failed' : '') +
-      (data.claudeSkipped ? ' \u2014 square footage/flyer extraction skipped (Claude isn\u2019t configured)' : '') +
-      (data.boardUrl ? '. <a href="' + escapeHtml(data.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
-    document.getElementById('respExcelBtn').style.display = respResults.length ? '' : 'none';
-    // Auto-mark uploaded replies completed so a re-run can't duplicate them
-    const uploadedKeys = pendingReplies.filter(r => r.addresses.length).map(r => r.key);
-    if (uploadedKeys.length && respProjectDetail){
-      pendingReplies.forEach(r => { if (r.addresses.length) r.completed = true; });
-      renderRespList();
-      fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
-        method: 'PATCH',
+    for (let b = 0; b < batches.length; b++){
+      const batch = batches[b];
+      setStatus('respGoStatus', 'Claude is reading ' + pendingReplies.length + ' repl' + (pendingReplies.length === 1 ? 'y' : 'ies') +
+        ' and updating Monday\u2026 this can take a minute' +
+        (batches.length > 1 ? ' (batch ' + (b + 1) + ' of ' + batches.length + ')' : '') + '.', '');
+      const res = await fetch('/api/respond', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ addCompleted: uploadedKeys })
-      }).catch(function(){});
+        body: JSON.stringify({ target: curTarget, replies: batch })
+      });
+      const data = await readApiJson(res);
+      if (!data.ok) throw new Error(data.error || 'Processing failed.');
+      respResults = respResults.concat(data.results || []);
+      totals.updated      += data.updated || 0;
+      totals.createdItems += data.createdItems || 0;
+      totals.unmatched     = totals.unmatched.concat(data.unmatched || []);
+      totals.failed        = totals.failed.concat(data.failed || []);
+      if (data.claudeSkipped) totals.claudeSkipped = true;
+      if (data.boardUrl) totals.boardUrl = data.boardUrl;
+      // After the first batch every later one targets the board that batch used,
+      // so a "new board" run creates exactly one board.
+      if (data.boardId) curTarget = { type: 'existing', boardId: data.boardId };
+
+      // Mark this batch completed now, not after the whole loop — a failure on a
+      // later batch must not make these replies upload a second time.
+      const uploadedKeys = batch.filter(r => r.addresses.length).map(r => r.key);
+      if (uploadedKeys.length && respProjectDetail){
+        batch.forEach(r => { if (r.addresses.length) r.completed = true; });
+        renderRespList();
+        fetch('/api/projects/' + encodeURIComponent(respProjectDetail.id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ addCompleted: uploadedKeys })
+        }).catch(function(){});
+      }
+      doneReplies += batch.length;
     }
+    const el = document.getElementById('respGoStatus');
+    el.className = 'status ' + (totals.failed.length ? 'warn' : 'ok');
+    el.innerHTML = 'Updated ' + totals.updated + ' item' + (totals.updated === 1 ? '' : 's') +
+      (totals.createdItems ? ', created ' + totals.createdItems : '') +
+      (totals.unmatched.length ? ' \u2014 ' + totals.unmatched.length + ' unmatched for manual review' : '') +
+      (totals.failed.length ? ' \u2014 ' + totals.failed.length + ' failed' : '') +
+      (totals.claudeSkipped ? ' \u2014 square footage/flyer extraction skipped (Claude isn\u2019t configured)' : '') +
+      (totals.boardUrl ? '. <a href="' + escapeHtml(totals.boardUrl) + '" target="_blank" rel="noopener">Open the board</a>' : '');
   } catch (err) {
+    if (doneReplies > 0) err.message += ' \u2014 ' + doneReplies + ' of ' + pendingReplies.length +
+      ' replies were already uploaded and are marked completed; click the button again to continue with the rest.';
     setStatus('respGoStatus', err.message, 'error');
   } finally {
+    document.getElementById('respExcelBtn').style.display = respResults.length ? '' : 'none';
     btn.disabled = false;
   }
 });

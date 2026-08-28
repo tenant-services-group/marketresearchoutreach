@@ -106,7 +106,7 @@ async function syncRows(request, context) {
     return json(400, { ok: false, error: 'target.type must be "new" or "existing".' });
   }
 
-  const ensured = await ensureColumns(boardId);
+  const ensured = await ensureColumns(boardId, target.type === 'new');
   const colId = ensured.colId;
   boardUrl = boardUrl || ensured.boardUrl;
 
@@ -116,14 +116,17 @@ async function syncRows(request, context) {
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const cv = {};
-    cv[colId.propertyName]   = r.propertyName;
-    if (r.email) cv[colId.contactEmail] = { email: r.email, text: r.email };
-    cv[colId.emailStatus]    = { label: '*Email Sent' };
-    cv[colId.emailsSent]     = { date: today };
-    cv[colId.leasingCompany] = r.leasingCompany;
-    cv[colId.firstName]      = r.firstName;
-    cv[colId.lastName]       = r.lastName;
-    cv[colId.city]           = r.city;
+    // A column the board doesn't have is left unmapped by ensureColumns, so
+    // skip it rather than writing to an "undefined" column id.
+    const setCv = (key, value) => { if (colId[key]) cv[colId[key]] = value; };
+    setCv('propertyName',   r.propertyName);
+    if (r.email) setCv('contactEmail', { email: r.email, text: r.email });
+    setCv('emailStatus',    { label: '*Email Sent' });
+    setCv('emailsSent',     { date: today });
+    setCv('leasingCompany', r.leasingCompany);
+    setCv('firstName',      r.firstName);
+    setCv('lastName',       r.lastName);
+    setCv('city',           r.city);
     try {
       await createItem(boardId, r.address || r.propertyName || ('Property ' + (i + 1)), cv, groupId);
       created++;

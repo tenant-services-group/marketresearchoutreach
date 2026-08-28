@@ -143,6 +143,8 @@ async function processReplies(request, context) {
         .map(a => ({ name: clean(a && a.name, 200) || 'attachment.pdf', contentBytes: String((a && a.contentBytes) || '') }))
         .filter(a => a.contentBytes && a.contentBytes.length <= Math.ceil(MAX_FILE_BYTES * 4 / 3) + 8)
         .slice(0, MAX_FILES_PER_REPLY),
+      skippedAttachments: (Array.isArray(r.skippedAttachments) ? r.skippedAttachments : [])
+        .map(n => clean(n, 200)).filter(Boolean).slice(0, 10),
     }))
     .filter(r => r.fromEmail && r.bodyText);
   if (!replies.length) return json(400, { ok: false, error: 'No replies were provided.' });
@@ -159,8 +161,9 @@ async function processReplies(request, context) {
   } else {
     return json(400, { ok: false, error: 'target.type must be "new" or "existing".' });
   }
-  const ensured = await ensureColumns(boardId);
+  const ensured = await ensureColumns(boardId, target.type === 'new');
   const colId = ensured.colId;
+  const colType = ensured.colType || {};
   boardUrl = boardUrl || ensured.boardUrl;
 
   // Existing items on the board, matched by name (= property address)
@@ -186,20 +189,25 @@ async function processReplies(request, context) {
     if (extract.skipped) claudeSkipped = true;
     const receivedDate = (reply.receivedAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
     const cv = {};
-    cv[colId.emailStatus]       = { label: '*Email Received' };
-    cv[colId.eliminationReason] = { label: 'Pending' };
-    cv[colId.emailReceivedDate] = { date: receivedDate };
+    // A column the board doesn't have is left unmapped by ensureColumns, so
+    // skip it rather than writing to an "undefined" column id.
+    const setCv = (key, value) => { if (colId[key]) cv[colId[key]] = value; };
+    setCv('emailStatus',       { label: '*Email Received' });
+    setCv('eliminationReason', { label: 'Pending' });
+    setCv('emailReceivedDate', { date: receivedDate });
     // Link column: only when a URL was actually in the reply body.
     // Attached files go to the item's File column (uploaded below).
     const flyerUrl = extract.flyerLinks[0] || '';
     const attachmentNames = reply.attachments.map(a => a.name);
     let notes = reply.note;
-    if (attachmentNames.length) {
-      notes = (notes ? notes + ' ' : '') + '[Attachments: ' + attachmentNames.join(', ') + ']';
+    if (attachmentNames.length || reply.skippedAttachments.length) {
+      notes = (notes ? notes + ' ' : '') + '*File Attached*';
     }
-    if (notes)                 cv[colId.notes] = { text: notes.slice(0, 2000) };
-    if (extract.squareFootage) cv[colId.squareFootage] = extract.squareFootage;
-    if (flyerUrl)              cv[colId.flyerLink] = { url: flyerUrl, text: 'Flyer' };
+    if (notes)                 setCv('notes', { text: notes.slice(0, 2000) });
+    if (extract.squareFootage) setCv('squareFootage', extract.squareFootage);
+    // Flyer Link is a link column on boards we create and plain text on the
+    // template-cloned boards — write whichever shape the column really is.
+    if (flyerUrl)              setCv('flyerLink', colType.flyerLink === 'link' ? { url: flyerUrl, text: 'Flyer' } : flyerUrl);
 
     const addresses = reply.addresses.length ? reply.addresses : ['(no address matched)'];
     for (const address of addresses) {
@@ -224,12 +232,12 @@ async function processReplies(request, context) {
           updated++;
         } else {
           const createCv = Object.assign({}, cv);
-          if (reply.fromEmail) createCv[colId.contactEmail] = { email: reply.fromEmail, text: reply.fromEmail };
+          if (reply.fromEmail && colId.contactEmail) createCv[colId.contactEmail] = { email: reply.fromEmail, text: reply.fromEmail };
           itemId = await createItem(boardId, address, createCv);
           itemByName[address.trim().toLowerCase()] = itemId;
           createdItems++;
         }
-        for (const att of reply.attachments) {
+        for (const att of (colId.file ? reply.attachments : [])) {
           try {
             await addFileToItem(itemId, colId.file, att.name, Buffer.from(att.contentBytes, 'base64'));
           } catch (err) {
